@@ -4,5 +4,8 @@ FROM Pokemon
 WHERE id NOT IN (
   SELECT before_id
   FROM Evolution
-) AND type = 'Water'
+) AND type = 'Water' AND id IN (
+  SELECT after_id
+  FROM Evolution 
+)
 ORDER BY name;
