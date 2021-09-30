@@ -40,12 +40,15 @@ void file_write_page(int fd, pagenum_t pagenum, const page_t* src);
 // Close the database file
 void file_close_database_file();
 
+/// below are the APIs for testing ///
 
-
-
-
+// gets file size from the header page
 pagenum_t file_get_size(int fd);
+
+// checks if a page number is in the vector(free page list)
 bool inVec(std::vector<pagenum_t> vec, pagenum_t page);
+
+// gets the free page list as a vector
 std::vector<pagenum_t> file_get_free_list(int fd);
 
 

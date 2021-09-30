@@ -16,7 +16,7 @@
  * 1. Open a file and check the descriptor
  * 2. Check if the file's initial size is 10 MiB
  */
-TEST(FileInitTest, HandlesInitialization) {
+TEST(FileTest, HandlesInitialization) {
   int fd;                                 // file descriptor
   const char* pathname = "init_test";  // customize it to your test file
 

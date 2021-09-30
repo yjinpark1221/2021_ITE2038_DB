@@ -9,22 +9,33 @@ std::vector<pagenum_t> openedFds;
 // • Then it returns the file descriptor of the opened database file.
 // • All other 5 commands below should be handled after open data file.
 int file_open_database_file(const char* pathname) {
-    int fd = open(pathname, O_RDWR | O_SYNC);
+    int fd = open(pathname, O_RDWR);
     if (fd < 0) {
-        fd = open(pathname, O_RDWR | O_SYNC | O_CREAT, 0644);
-        openedFds.push_back(fd);
-        pagenum_t* b = (pagenum_t*)malloc(PAGE_SIZE * 2560);
-        b[0] = 1;
-        b[1] = 2560;
-        for (pagenum_t i = 1; i < 2560; ++i) {
-            b[512 * i] = (i + 1) % 2560;
+        fd = open(pathname, O_RDWR | O_CREAT, 0644);
+        if (fd < 0) {
+            perror("file_open_database_file negative fd");
+            exit(0);
         }
-        if (pwrite(fd, b, PAGE_SIZE * 2560, 0) <= 0) {
+        pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
+        buf[0] = 1;
+        buf[1] = 2560;
+
+        if (pwrite(fd, buf, PAGE_SIZE, 0) <= 0) {
             perror("in file_open_database_file pwrite error");
             exit(0);
         }
-        free(b);
+        sync();
+        for (pagenum_t i = 1; i < 2560; ++i) {
+            buf[0] = (i + 1) % 2560;
+            if (pwrite(fd, buf, PAGE_SIZE, PAGE_SIZE * i) <= 0) {
+                perror("in file_open_database_file pwrite error");
+                exit(0);
+            }
+            sync();
+        }
+        free(buf);
     }
+    openedFds.push_back(fd);
     return fd;
 }
 
@@ -34,8 +45,8 @@ int file_open_database_file(const char* pathname) {
 // • It returns a new page # from the free page list.
 // • If the free page list is empty, then it should grow the database file and return a free page #.
 pagenum_t file_alloc_page(int fd) {
-    pagenum_t buf[2];
-    if (pread(fd, buf, sizeof(pagenum_t) * 2, 0) <= 0) {
+    pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
+    if (pread(fd, buf, PAGE_SIZE, 0) <= 0) {
         perror("file_alloc_page pread error");
         exit(0);
     }
@@ -43,27 +54,30 @@ pagenum_t file_alloc_page(int fd) {
     if (freePage == 0) {
         buf[0] = numPage;
         buf[1] = numPage * 2;
-        if (pwrite(fd, buf, sizeof(pagenum_t) * 2, 0) <= 0) {
+        if (pwrite(fd, buf, PAGE_SIZE, 0) <= 0) {
             perror("file_alloc_page pwrite error");
             exit(0);
-        }// change first free page
+        }
+        sync();// change header page
         for (int i = 0; i < numPage - 1; ++i) {
             buf[0] = (numPage + i + 1) % (2 * numPage);
-            if (pwrite(fd, buf, sizeof(pagenum_t), (numPage + i) * PAGE_SIZE) <= 0) {
+            if (pwrite(fd, buf, PAGE_SIZE, (numPage + i) * PAGE_SIZE) <= 0) {
                 perror("file_alloc_page pwrite error");
                 exit(0);
             }
+            sync();
         }// add free pages : numPage ~ (2 * numPage - 1)
         freePage = numPage;
     }
-    if (pread(fd, buf, sizeof(pagenum_t), freePage * PAGE_SIZE) <= 0) {
+    if (pread(fd, buf, PAGE_SIZE, freePage * PAGE_SIZE) <= 0) {
         perror("file_use_free_page pread error");
         exit(0);
     }//get next free page
-    if (pwrite(fd, buf, sizeof(pagenum_t), 0) <= 0) {
+    if (pwrite(fd, buf, PAGE_SIZE, 0) <= 0) {
         perror("file_use_free_page pread error");
         exit(0);
-    }//change the first free page
+    }
+    sync();//change the first free page
     return freePage;
 }
 
@@ -72,22 +86,24 @@ pagenum_t file_alloc_page(int fd) {
 // • Free a page.
 // • It informs the disk space manager of returning the page with ‘page_number’ for freeing it to the free page list.
 void file_free_page(int fd, pagenum_t pagenum) {
-    pagenum_t buf;
-    if (pread(fd, &buf, sizeof(pagenum_t), 0) <= 0) {
+    pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
+    if (pread(fd, buf, PAGE_SIZE, 0) <= 0) {
         perror("file_free_page pread error");
         exit(0);
     }
-    pagenum_t freePage = buf;            // read original free page
-    buf = pagenum;
-    if (pwrite(fd, &buf, sizeof(pagenum_t), 0) <= 0) {
+    pagenum_t freePage = buf[0];            // read original free page
+    buf[0] = pagenum;
+    if (pwrite(fd, buf, PAGE_SIZE, 0) <= 0) {
         perror("file_free_page pwrite error");
         exit(0);
-    }// change the first free page
-    buf = freePage;
-    if (pwrite(fd, &buf, sizeof(pagenum_t), pagenum * PAGE_SIZE) <= 0) {
+    }
+    sync();// change the first free page
+    buf[0] = freePage;
+    if (pwrite(fd, buf, PAGE_SIZE, pagenum * PAGE_SIZE) <= 0) {
         perror("file_free_page pwrite error");
         exit(0);
-    }// link to original free page
+    }
+    sync();// link to original free page
     return;
 }
 
@@ -118,6 +134,7 @@ void file_write_page(int fd, pagenum_t pagenum, const page_t* src) {
         perror("file_write_page pwrite error");
         exit(0);
     }
+    sync();
 }
 
 // Close the database file
@@ -126,23 +143,24 @@ void file_write_page(int fd, pagenum_t pagenum, const page_t* src) {
 // • This API doesn’t receive a file descriptor as a parameter. So a means for referencing the descriptor of the opened file(i.e., global variable) is required.
 void file_close_database_file(){
     for (int fd : openedFds) {
-        if (close(fd) < 0) {
+        if (fd > 0 && close(fd) < 0) {
             perror("file_close_database_file close error");
             exit(0);
         }
     }
+    openedFds.clear();
 }
 
-// Get total page number 
-// for testing
+/// below are the APIs for testing ///
+
+// gets file size from the header page
 pagenum_t file_get_size(int fd) {
     pagenum_t buf;
     pread(fd, &buf, sizeof(pagenum_t), sizeof(pagenum_t));
     return buf;
 }
 
-// Check if page is in the vector
-// for testing
+// checks if a page number is in the vector(free page list)
 bool inVec(std::vector<pagenum_t> vec, pagenum_t page) {
     for (pagenum_t p : vec) {
         if (page == p) return 1;
@@ -150,8 +168,7 @@ bool inVec(std::vector<pagenum_t> vec, pagenum_t page) {
     return 0;
 }
 
-// Get the free page list
-// for testing
+// gets the free page list as a vector
 std::vector<pagenum_t> file_get_free_list(int fd) {
     pagenum_t pagenum = lseek(fd, 0, SEEK_END) / PAGE_SIZE;
     std::vector<pagenum_t> vec;
