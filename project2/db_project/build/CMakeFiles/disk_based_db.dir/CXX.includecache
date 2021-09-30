@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../db/include/bpt.h
+stdio.h
+-
+stdlib.h
+-
+stdbool.h
+-
+
+/root/db_project/db_project/main.cc
+bpt.h
+/root/db_project/db_project/bpt.h
+

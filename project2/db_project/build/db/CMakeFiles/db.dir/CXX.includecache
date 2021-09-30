@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../db/include/file.h
+stdint.h
+-
+fcntl.h
+-
+unistd.h
+-
+stdlib.h
+-
+sys/stat.h
+-
+vector
+-
+stdio.h
+-
+
+/root/db_project/db_project/db/src/file.cc
+file.h
+/root/db_project/db_project/db/src/file.h
+
