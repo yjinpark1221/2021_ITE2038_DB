@@ -1,5 +1,6 @@
-#include "file.h"
+#include "../include/file.h"
 
+std::vector<table_t> openedFds;
 // Open existing database file or create one if it doesn't exist
 // int file_open_database_file (const char * pathname)
 // • Open the database file.
@@ -15,9 +16,9 @@ table_t file_open_database_file(const char* pathname) {
             return fd;
         } // controlled in higher layer
         pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
-        buf[0] = 1;
-        buf[1] = 2560;
-
+        buf[0] = 1; // free page
+        buf[1] = 2560; // num page
+        buf[2] = 0; // root page
         if (pwrite(fd, buf, PAGE_SIZE, 0) <= 0) {
             perror("in file_open_database_file pwrite error");
             exit(0);
@@ -33,7 +34,7 @@ table_t file_open_database_file(const char* pathname) {
         }
         free(buf);
     }
-//    openedFds.push_back(fd);
+    openedFds.push_back(fd);
     return fd;
 }
 
@@ -43,35 +44,31 @@ table_t file_open_database_file(const char* pathname) {
 // • It returns a new page # from the free page list.
 // • If the free page list is empty, then it should grow the database file and return a free page #.
 pagenum_t file_alloc_page(table_t fd) {
-    pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
-    if (pread(fd, buf, PAGE_SIZE, 0) <= 0) {
+    page_t page;
+    if (pread(fd, &page, PAGE_SIZE, 0) <= 0) {
         perror("file_alloc_page pread error");
         exit(0);
     }
-    pagenum_t freePage = buf[0], numPage = buf[1];
+    pagenum_t freePage = ((pagenum_t*)page.a)[0], numPage = ((pagenum_t*)page.a)[1], rootPage = ((pagenum_t*)page.a)[2];
     if (freePage == 0) {
-        buf[0] = numPage;
-        buf[1] = numPage * 2;
-        if (pwrite(fd, buf, PAGE_SIZE, 0) <= 0) {
-            perror("file_alloc_page pwrite error");
-            exit(0);
-        }
-        sync();// change header page
-        for (pagenum_t i = 0; i < numPage - 1; ++i) {
-            buf[0] = (numPage + i + 1) % (2 * numPage);
-            if (pwrite(fd, buf, PAGE_SIZE, (numPage + i) * PAGE_SIZE) <= 0) {
+        for (pagenum_t i = 0; i < numPage; ++i) {
+            ((pagenum_t*)page.a)[0] = (numPage + i + 1) % (2 * numPage);
+            if (pwrite(fd, &page, PAGE_SIZE, (numPage + i) * PAGE_SIZE) <= 0) {
                 perror("file_alloc_page pwrite error");
                 exit(0);
             }
             sync();
         }// add free pages : numPage ~ (2 * numPage - 1)
         freePage = numPage;
+        numPage *= 2;
     }
-    if (pread(fd, buf, PAGE_SIZE, freePage * PAGE_SIZE) <= 0) {
+    if (pread(fd, &page, PAGE_SIZE, freePage * PAGE_SIZE) <= 0) {
         perror("file_use_free_page pread error");
         exit(0);
-    }//get next free page
-    if (pwrite(fd, buf, PAGE_SIZE, 0) <= 0) {
+    }//get next free page : ((pagenum_t*)page.a)[0]
+    ((pagenum_t*)page.a)[1] = numPage;
+    ((pagenum_t*)page.a)[2] = rootPage;
+    if (pwrite(fd, &page, PAGE_SIZE, 0) <= 0) {
         perror("file_use_free_page pread error");
         exit(0);
     }
@@ -140,13 +137,13 @@ void file_write_page(table_t fd, pagenum_t pagenum, const page_t* src) {
 // • Close the database file.
 // • This API doesn’t receive a file descriptor as a parameter. So a means for referencing the descriptor of the opened file(i.e., global variable) is required.
 void file_close_database_file(){
-    // for (table_t fd : openedFds) {
-    //     if (fd > 0 && close(fd) < 0) {
-    //         perror("file_close_database_file close error");
-    //         exit(0);
-    //     }
-    // }
-    // openedFds.clear();
+    for (table_t fd : openedFds) {
+        if (fd > 0 && close(fd) < 0) {
+            perror("file_close_database_file close error");
+            exit(0);
+        }
+    }
+    openedFds.clear();
 }
 
 /// below are the APIs for testing ///

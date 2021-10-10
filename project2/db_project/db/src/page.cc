@@ -1,5 +1,6 @@
 // page.h
-#include "page.h"
+#include "../include/page.h"
+#define VERBOSE 1
 page_t::page_t(mleaf_t& leaf) {
     ((pagenum_t*)a)[0 / 8] = leaf.parent;
     ((u32_t*)a)[8 / 4] = leaf.is_leaf;
@@ -19,8 +20,8 @@ page_t::page_t(minternal_t& node) {
     ((u32_t*)a)[12 / 4] = node.num_keys;
     ((pagenum_t*)a)[120 / 8] = node.first_child;
     for (int i = 0; i < node.num_keys; ++i) {
-        ((key__t*)a)[128 / 8 + i] = node.keys[i];
-        ((pagenum_t*)a)[128 / 8 + i + 1] = node.children[i];
+        ((key__t*)a)[128 / 8 + i * 2] = node.keys[i];
+        ((pagenum_t*)a)[128 / 8 + i * 2 + 1] = node.children[i];
     }
 }
 // Add any structures you need
@@ -72,6 +73,7 @@ mnode_t::mnode_t(page_t& page) {
 
 mleaf_t::mleaf_t() :mnode_t(0, 1, 0) {
     free_space = 3968;
+    right_sibling = 0;
 }
 mleaf_t::mleaf_t(page_t& page) : mnode_t(page) {
     is_leaf = 1;
@@ -79,7 +81,7 @@ mleaf_t::mleaf_t(page_t& page) : mnode_t(page) {
     right_sibling = ((pagenum_t*)page.a)[120 / 8];
     for (u32_t i = 0; i < num_keys; ++i) {
         mslot_t* slot = new mslot_t((slot_t*)(page.a + 128) + i);
-        char val[113];
+        char val[123];
         memcpy(val, page.a + slot->offset, slot->size);
         val[slot->size] = '\0';
         std::string value = val;                 // CHECK
@@ -90,11 +92,13 @@ mleaf_t::mleaf_t(page_t& page) : mnode_t(page) {
 mleaf_t::mleaf_t(pagenum_t p, u32_t i, u32_t n) : mnode_t(p, i, n) {
     is_leaf = 1;
     free_space = 3968;
+    right_sibling = 0;
 }
 mleaf_t::mleaf_t(key__t key, std::string value) : mnode_t(0, 1, 1) {
     free_space = 3968 - value.size() - 12;
     slots.push_back({key, value.size(), 4096 - value.size()});
     values.push_back(value);
+    right_sibling = 0;
 }
 void mleaf_t::push_back(key__t key, std::string value) {
     free_space -= value.size() + 12;

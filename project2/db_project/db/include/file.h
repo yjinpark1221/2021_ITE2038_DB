@@ -1,30 +1,7 @@
-#ifndef __DB_FILE_H__
-#define __DB_FILE_H__
-#define INITIAL_DB_FILE_SIZE (10 * 1024 * 1024)  // 10 MiB
-#define PAGE_SIZE (4 * 1024)                     // 4 KiB
-#include <stdint.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <vector>
-#include <stdio.h>
-#include <stdint.h>
-#include <vector>
-#include <string>
-#include <cstring>
-typedef uint64_t pagenum_t;
-typedef int64_t table_t;
-typedef int64_t key__t;
-typedef uint16_t u16_t;
-typedef uint32_t u32_t;
-struct page_t;
-// These definitions are not requirements.
-// You may build your own way to handle the constants.
-#ifndef __OPENEDFDS__
-#define __OPENEDFDS__
-//std::vector<table_t> openedFds;
-#endif
+#ifndef __FILE_H__
+#define __FILE_H__
+#include "page.h"
+
 // 1. int64_t file_open_table_file (const char * pathname)
 // • Open the table file.
 // • It opens an existing table file using ‘pathname’ or create a new file if absent.

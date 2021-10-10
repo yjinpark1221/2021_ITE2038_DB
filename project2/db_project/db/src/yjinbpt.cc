@@ -1,10 +1,9 @@
-#include "yjinbpt.h"
+#include "../include/yjinbpt.h"
+#include <cassert>
 #include <iostream>
-int order = DEFAULT_ORDER;
-std::queue<pagenum_t> queue;
 #define INTERNAL_MAX_KEYS 248
 bool verbose_output = false;
-#define VERBOSE 0
+#define VERBOSE 1
 
 // FUNCTION DEFINITIONS.
 
@@ -20,20 +19,14 @@ table_t open_table(char* pathname) {
 // • Insert input ‘key/value’ (record) with its size to data file at the right place.
 // • If success, return 0. Otherwise, return non-zero value.
 int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
-    char tmpv[120];
+    char tmpv[123];
     u16_t tmps;
     mleaf_t leaf;
     page_t page;
 
-    if(VERBOSE) {
-        print_tree(table_id);
-        printf("\nwas tree\n\n");
-    }
     if (db_find(table_id, key, tmpv, &tmps) == 0) { // find success -> db unchanged
-        if (VERBOSE) printf("key %ld found,  %s\n", key, tmpv);
         return 1;                           // insert fail
     }
-    if (VERBOSE)printf("key %ld not found\n", key);
     /* Create a new record for the
      * value.
      */
@@ -60,13 +53,11 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
     leaf = page;
 
     if (leaf.free_space >= val_size + 12) {
-        return insert_into_leaf(table_id, leaf_pn, leaf, key, svalue);
+        return insert_into_leaf(table_id, leaf_pn, key, svalue);
     }
-
     /* Case: leaf has room for key and pointer.
      */
-
-    return insert_into_leaf_after_splitting(table_id, leaf_pn, leaf, key, svalue);
+    return insert_into_leaf_after_splitting(table_id, leaf_pn, key, svalue);
 }
 
 // 3. int db_find (int64_t table_id, int64_t key, char * ret_val, uint16_t * val_size);
@@ -79,8 +70,6 @@ int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
     page_t page;
     mleaf_t leaf;
     pagenum_t pn = find_leaf_page(fd, key);
-    if (VERBOSE) std::cout << "db_find : find_leaf_page = " << pn << "\n";
-    //Empty tree
     if (pn == 0) { // fail
         ret_val[0] = 0;
         val_size = 0;
@@ -139,7 +128,7 @@ void print_leaves(table_t fd, mnode_t* root ) {
     mnode_t c = *root;
     page_t cp;
     if (root == NULL) {
-        printf("Empty tree.\n");
+        // printf("Empty tree.\n");
         return;
     }
     while (!c.is_leaf) {
@@ -151,21 +140,21 @@ void print_leaves(table_t fd, mnode_t* root ) {
     mleaf_t leaf = cp;
     while (1) {
         for (i = 0; i < leaf.num_keys; i++) {
-            if (VERBOSE)
-                printf("%s ", leaf.values[i].c_str());
-            printf("%ld ", leaf.slots[i].key);
+            // if (VERBOSE)
+            //     // printf("%s ", leaf.values[i].c_str());
+            // printf("%ld ", leaf.slots[i].key);
         }
-        if (VERBOSE)
-            printf("%ld ", leaf.right_sibling);
+        // if (VERBOSE)
+        //     // printf("%ld ", leaf.right_sibling);
         if (leaf.right_sibling != 0) {
-            printf(" | ");
+            // printf(" | ");
             file_read_page(fd, leaf.right_sibling, &cp);
             leaf = cp;
         }
         else
             break;
     }
-    printf("\n");
+    // printf("\n");
 }
 
 
@@ -221,6 +210,7 @@ pagenum_t get_root_page(table_t fd) {
  */
 void print_tree(table_t fd) {
     pagenum_t pn = get_root_page(fd);
+    std::queue<pagenum_t> queue;
     page_t page;
     mnode_t node;
     mleaf_t leaf;
@@ -231,24 +221,25 @@ void print_tree(table_t fd) {
         printf("Empty tree.\n");
         return;
     }
-    queue = std::queue<pagenum_t>();
     queue.push(pn);
     while (!queue.empty()) {
         pn = queue.front();
         queue.pop();
         file_read_page(fd, pn, &page);
-        internal = page;
-        if (internal.parent != 0) {
-            pagenum_t first_child = internal.children[0];
-            if (pn == first_child) {
-                new_rank = path_to_root(fd, internal);
-                if (new_rank != rank) {
-                    rank = new_rank;
-                    printf("\n");
-                }
+        node = page;
+        pagenum_t parent_pn = node.parent;
+        page_t parent_page;
+        minternal_t parent;
+        file_read_page(fd, parent_pn, &parent_page);
+        parent = parent_page;
+
+        if (pn == parent.first_child) {
+            new_rank = path_to_root(fd, node);
+            if (new_rank != rank) {
+                rank = new_rank;
+                printf("\n");
             }
         }
-        node = page;
         if (!node.is_leaf) {
             internal = page;
             queue.push(internal.first_child);
@@ -275,10 +266,8 @@ void print_tree(table_t fd) {
  * Returns the leaf containing the given key.
  */
 pagenum_t find_leaf_page(table_t fd, key__t key) {
-    pagenum_t pn  = get_root_page(fd); // page_t ALLOCATED
+    pagenum_t pn = get_root_page(fd);
     if (pn == 0) {
-        if (VERBOSE) 
-            printf("Empty tree.\n");
         return 0;
     }
     
@@ -322,10 +311,30 @@ int cut_leaf(mleaf_t* leaf) {
         sum += leaf->slots[i].size + 12;
         if (sum >= 1984) break;
     }
+    assert(i < leaf->num_keys);
     return i;
 }
 
+void print(mleaf_t& leaf) {
+    // printf("printing leaf\n");
+    // printf("parent %d\n", leaf.parent);
+    // printf("numkeys %d\n", leaf.num_keys);
+    // printf("free_space %d\n", leaf.free_space);
+    // for (int i = 0; i < leaf.num_keys; ++i) {
+    //     printf("slots[i] : %d %d %d\tvalues[i] : %s\n", leaf.slots[i].key, leaf.slots[i].size, leaf.slots[i].offset, leaf.values[i]);
+    // }
+}
 
+void print(minternal_t& internal) {
+    // printf("printing internal\n");
+    // printf("parent %d\n", internal.parent);
+    // printf("numkeys %d\n", internal.num_keys);
+    // printf("first_child %d\n", internal.first_child);
+    // for (int i = 0; i < internal.num_keys; ++i) {
+    //     printf("keys[i] : %d \tchildren[i] : %d\n", internal.keys[i], internal.children[i]);
+    // }
+
+}
 // INSERTION
 
 
@@ -337,6 +346,7 @@ int get_left_index(minternal_t internal /* parent */, pagenum_t left) {
     for (int i = 0; i < internal.num_keys; ++i) {
         if (internal.children[i] == left) return i;
     }
+    assert(internal.first_child == left);
     return -1;
 }
 
@@ -344,71 +354,98 @@ int get_left_index(minternal_t internal /* parent */, pagenum_t left) {
  * key into a leaf.
  * Returns the altered leaf page number.
  */
-pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, mleaf_t& leaf, key__t key, std::string value) {
+pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string value) {
+    page_t leaf_page;
+    file_read_page(fd, pn, &leaf_page);
+    mleaf_t leaf = leaf_page;
 
     int i, insertion_point;
-    mslot_t tmpslot(key);
-    auto iter = std::upper_bound(leaf.slots.begin(), leaf.slots.end(), tmpslot);
+    mslot_t slot;
+    slot.size = value.size();
+    slot.key = key;
+    auto iter = std::upper_bound(leaf.slots.begin(), leaf.slots.end(), slot);
     insertion_point = iter - leaf.slots.begin(); // first key index to move
-    leaf.slots.push_back(tmpslot);
-    leaf.values.push_back(""); // make space
-    for (i = leaf.num_keys; i > insertion_point; --i) {
-        leaf.slots[i] = leaf.slots[i - 1];
-        leaf.values[i] = leaf.values[i - 1];
-        leaf.slots[i].offset -= value.size();
-        leaf.values[i] = leaf.values[i - 1];
-    }
-
-    leaf.slots[insertion_point].key = key;
-    leaf.slots[insertion_point].size = value.size();
-    leaf.slots[insertion_point].offset = leaf.slots[insertion_point - 1].offset - value.size();
-    leaf.values[insertion_point] = value;
-
+    leaf.slots.insert(leaf.slots.begin() + insertion_point, slot);
+    leaf.values.insert(leaf.values.begin() + insertion_point, value);
     leaf.num_keys++;
-    leaf.free_space -= value.size() + 12;
-
-    page_t page = leaf;
-    file_write_page(fd, pn, &page);
+    adjust(leaf);
+    leaf_page = leaf;
+    file_write_page(fd, pn, &leaf_page);
     return 0;
 }
 
+int adjust(mleaf_t& leaf) {
+    int offset = 4096;
+    int used_space = 0;
+    for (int i = 0; i < leaf.num_keys; ++i) {
+        offset -= leaf.slots[i].size;
+        used_space +=  leaf.slots[i].size + 12;
+        leaf.slots[i].offset = offset;
+    }
+    leaf.free_space = 3968 - used_space;
+    return used_space;
+}
 
 /* Inserts a new key and pointer
  * to a new record into a leaf so as to exceed
  * the tree's order, causing the leaf to be split
  * in half.
  */
-pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, mleaf_t leaf, key__t key, std::string value) {
+pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key, std::string value) {
     pagenum_t new_pn = file_alloc_page(fd);
-    int i, insertion_point;
-    int split_point = cut_leaf(&leaf);
-    mleaf_t new_leaf;
-    new_leaf.parent = leaf.parent;
-    key__t cmp_key = leaf.slots[split_point].key;
-//  int offset_diff = PAGE_SIZE - leaf.slots[split_point - 1].size;
-    for (int i = split_point; i < leaf.num_keys; ++i) {
-        new_leaf.push_back(leaf.slots[i].key, leaf.values[i]);
-    }
-    for (int i = split_point; i < leaf.num_keys; ++i) {
-        leaf.pop_back();
-    }
+    mleaf_t leaf, new_leaf;
+    page_t page;
+    file_read_page(fd, pn, &page);
+    leaf = page;
 
+    new_leaf.right_sibling = leaf.right_sibling;
+    leaf.right_sibling = new_pn;
+
+    new_leaf.parent = leaf.parent;
+
+    int split_point = cut_leaf(&leaf);
+    key__t cmp_key = leaf.slots[split_point].key;
+    new_leaf.is_leaf = 1;
+    //split_point ~ num_keys - 1 -> num_keys  - split_point
+    new_leaf.slots.reserve(leaf.num_keys - split_point);
+    new_leaf.values.reserve(leaf.num_keys - split_point);
+    new_leaf.slots.insert(new_leaf.slots.end(), leaf.slots.begin() + split_point, leaf.slots.end());
+    new_leaf.values.insert(new_leaf.values.end(), leaf.values.begin() + split_point, leaf.values.end());
+    new_leaf.num_keys = leaf.num_keys - split_point;
+
+    leaf.num_keys = split_point;
+
+// ---------------------------------------------------------------------------------- //
+    leaf.slots.resize(split_point);
+    leaf.values.resize(split_point);
+// or //
+    // leaf.slots.erase(leaf.slots.begin() + split_point, leaf.slots.end());
+    // leaf.values.erase(leaf.values.begin() + split_point, leaf.values.end());
+// ---------------------------------------------------------------------------------- //
+
+    adjust(leaf);
+    adjust(new_leaf);
+
+    page = new_leaf;
+    file_write_page(fd, new_pn, &page);
+
+    page = leaf;
+    file_write_page(fd, pn, &page);
+    
     /* Case : insert into original leaf
     */
     if (key < cmp_key) {
-        page_t page = new_leaf;
-        file_write_page(fd, new_pn, &page);
-        insert_into_leaf(fd, pn, leaf, key, value);
+        insert_into_leaf(fd, pn, key, value);
+        file_read_page(fd, pn, &page);
+        leaf = page;
     }
-
     /* Case : insert into new leaf
      */
     else {
-        page_t page = leaf;
-        file_write_page(fd, pn, &page);
-        insert_into_leaf(fd, new_pn, new_leaf, key, value);
+        insert_into_leaf(fd, new_pn, key, value);
+        file_read_page(fd, new_pn, &page);
+        new_leaf = page;
     }
-
     return insert_into_parent(fd, pn, new_pn, new_leaf.slots[0].key, leaf.parent);
 }
 
@@ -421,15 +458,17 @@ pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn,
     page_t page;
     file_read_page(fd, parent_pn, &page);
     minternal_t parent = page;
+
     parent.keys.push_back(-1);
     parent.children.push_back(-1);
-    for (int i = parent.num_keys; i > left_index + 1; --i) {
+    for (int i = parent.num_keys - 1; i > left_index; --i) {
         parent.keys[i + 1] = parent.keys[i];
         parent.children[i + 1] = parent.children[i];
     }
     parent.keys[left_index + 1] = key;
     parent.children[left_index + 1] = new_pn;
     ++parent.num_keys;
+
     page = parent;
     file_write_page(fd, parent_pn, &page);
     return 0;
@@ -457,13 +496,13 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
     std::vector<pagenum_t> temp_children = internal.children;
     temp_keys.push_back(-1);
     temp_children.push_back(-1);
-    for (int i = internal.num_keys; i > left_index; --i) {
+    for (int i = internal.num_keys - 1; i > left_index; --i) {
         temp_keys[i + 1] = temp_keys[i];
         temp_children[i + 1] = temp_children[i];
     }
     temp_keys[left_index + 1] = key;
     temp_children[left_index + 1] = new_pn;
-        
+
     /* Create the new node and copy
      * half the keys and pointers to the
      * old and half to the new.
@@ -474,6 +513,7 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
     new_internal.parent = internal.parent;
     new_internal.first_child = temp_children[124];
     new_internal.num_keys = 0;
+    new_internal.is_leaf = 0;
     internal.num_keys = 0;
     internal.keys.clear();
     internal.children.clear();
@@ -493,14 +533,14 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
     pagenum_t child_pn = new_internal.first_child;
     file_read_page(fd, child_pn, &page);
     
-    ((pagenum_t*)(page.a))[0] = new_pn;
+    ((pagenum_t*)(page.a))[0] = new_internal_pn;
     file_write_page(fd, child_pn, &page);
 
     for (int i = 0; i < new_internal.num_keys; ++i) {
         child_pn = new_internal.children[i];
         file_read_page(fd, child_pn, &page);
 
-        ((pagenum_t*)(page.a))[0] = new_pn;
+        ((pagenum_t*)(page.a))[0] = new_internal_pn;
         file_write_page(fd, child_pn, &page);
     }
 
@@ -508,18 +548,15 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
      * nodes resulting from the split, with
      * the old node to the left and the new to the right.
      */
-    return insert_into_parent(fd, parent_pn, new_pn, new_key, internal.parent);
+    return insert_into_parent(fd, parent_pn, new_internal_pn, new_key, internal.parent);
 }
 
 /* Inserts a new node (leaf or internal node) into the B+ tree.
  * Returns the root of the tree after insertion.
  */
 pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t new_key, pagenum_t parent) {
-
-    /* Case: new root. */
-
     if (parent == 0) {
-        return insert_into_new_root(fd, pn, new_pn);
+        return insert_into_new_root(fd, pn, new_pn, new_key);
     }
     
     /* Case: leaf or node. (Remainder of
@@ -527,19 +564,17 @@ pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t 
      */
     page_t page;
     file_read_page(fd, parent, &page);
-    minternal_t internal;
+    minternal_t internal = page;
 
     /* Find the parent's pointer to the left 
      * node.
      */
     int left_index = get_left_index(internal, pn);
-
     /* Simple case: the new key fits into the node. 
      */
     if (internal.num_keys < INTERNAL_MAX_KEYS) {
         return insert_into_node(fd, pn, new_pn, new_key, parent, left_index);
     }
-
     /* Harder case:  split a node in order 
      * to preserve the B+ tree properties.
      */
@@ -550,41 +585,47 @@ pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t 
  * and inserts the appropriate key into
  * the new root.
  */
-pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn) {
-    page_t op, np;
-    file_read_page(fd, pn, &op);
-    file_write_page(fd, new_pn, &np);
-    mnode_t on = op;
+pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t key) {
+    page_t page, new_page;
+    file_read_page(fd, pn, &page);
+    file_read_page(fd, new_pn, &new_page);
     pagenum_t root_pn = file_alloc_page(fd);
-    page_t rp;
+    page_t root_page;
     minternal_t root;
     root.num_keys = 1;
     root.parent = 0;
+    root.is_leaf = 0;
+
     root.first_child = pn;
     root.children.push_back(new_pn);
-
-    if (on.is_leaf) {
-        mleaf_t ol = op, nl = np;
-        root.keys.push_back(nl.slots[0].key);
-        ol.parent = root_pn;
-        nl.parent = root_pn;
-        nl.right_sibling = ol.right_sibling;
-        ol.right_sibling = new_pn;
-        op = ol;
-        np = nl;
+    mnode_t node = page;
+    if (node.is_leaf) {
+        mleaf_t leaf = page, new_leaf = new_page;
+        root.keys.push_back(new_leaf.slots[0].key);
+        leaf.parent = root_pn;
+        new_leaf.parent = root_pn;
+        new_leaf.right_sibling = leaf.right_sibling;
+        leaf.right_sibling = new_pn;
+        page = leaf;
+        new_page = new_leaf;
     }
     else {
-        minternal_t oi = op, ni = np;
-        root.keys.push_back(ni.keys[0]);
-        oi.parent = root_pn;
-        ni.parent = root_pn;
-        op = oi;
-        np = ni;
+        minternal_t internal = page, new_internal = new_page;
+        root.keys.push_back(key);
+        internal.parent = root_pn;
+        new_internal.parent = root_pn;
+        page = internal;
+        new_page = new_internal;
     }
-    rp = root;
-    file_write_page(fd, pn, &op);
-    file_write_page(fd, new_pn, &np);
-    file_write_page(fd, root_pn, &rp);
+    root_page = root;
+    file_write_page(fd, pn, &page);
+    file_write_page(fd, new_pn, &new_page);
+    file_write_page(fd, root_pn, &root_page);
+
+    page_t header_page;
+    file_read_page(fd, 0, &header_page);
+    ((pagenum_t*)header_page.a)[2] = root_pn;
+    file_write_page(fd, 0, &header_page);      // header
     return 0;
 }
 
@@ -631,8 +672,8 @@ int get_neighbor_index( node * n ) {
             return i - 1;
 
     // Error state.
-    printf("Search for nonexistent pointer to node in parent.\n");
-    printf("Node:  %#lx\n", (unsigned long)n);
+    // printf("Search for nonexistent pointer to node in parent.\n");
+    // printf("Node:  %#lx\n", (unsigned long)n);
     exit(EXIT_FAILURE);
 }
 

@@ -1,7 +1,26 @@
 // page.h
 #ifndef __PAGE_H__
 #define __PAGE_H__
-#include "file.h"
+#include <stdint.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <vector>
+#include <stdio.h>
+#include <stdint.h>
+#include <vector>
+#include <string>
+#include <cstring>
+#define INITIAL_DB_FILE_SIZE (10 * 1024 * 1024)  // 10 MiB
+#define PAGE_SIZE (4 * 1024)                     // 4 KiB
+
+typedef uint64_t pagenum_t;
+typedef int64_t table_t;
+typedef int64_t key__t;
+typedef uint16_t u16_t;
+typedef uint32_t u32_t;
+
 struct page_t;
 struct slot_t;
 struct mslot_t;
@@ -16,7 +35,9 @@ struct page_t {
     page_t(mleaf_t& leaf);
     page_t(minternal_t& internal);
     page_t() {};
-};
+};// These definitions are not requirements.
+
+
 // Add any structures you need
 
 struct slot_t {

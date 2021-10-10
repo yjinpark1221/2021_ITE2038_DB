@@ -8,20 +8,12 @@
 #include <stdbool.h>
 #include <algorithm>
 #include <queue>
-#include "page.h"
+#include "file.h"
 #ifdef WINDOWS
 #define bool char
 #define false 0
 #define true 1
 #endif
-
-// Default order is 4.
-#define DEFAULT_ORDER 248
-
-// Minimum order is necessarily 3.  We set the maximum
-// order arbitrarily.  You may change the maximum order.
-#define MIN_ORDER 3
-#define MAX_ORDER 20
 
 // TYPES.
 
@@ -35,9 +27,6 @@
  * to change the type and content
  * of the value field.
  */
-typedef struct record {
-    int value;
-} record;
 
 /* Type representing a node in the B+ tree.
  * This type is general enough to serve for both
@@ -81,14 +70,15 @@ int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size);
 int cut(int length);
 int cut_leaf(mleaf_t* leaf);
 int get_left_index(minternal_t internal /* parent */, pagenum_t left);
-pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, mleaf_t& leaf, key__t key, std::string value);
-pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, mleaf_t leaf, key__t key, std::string value);
+int adjust(mleaf_t& leaf);
+pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string value);
+pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key, std::string value);
 pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index);
 pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index);
 pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t new_key, pagenum_t parent);
-pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn);
+pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t key);
 pagenum_t start_new_tree(table_t fd, key__t key, std::string value);
 int db_insert(table_t table_id, key__t key, char * value, u16_t val_size);
 
