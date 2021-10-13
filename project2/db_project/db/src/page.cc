@@ -1,5 +1,5 @@
 // page.h
-#include "../include/page.h"
+// #include "page.h"
 #define VERBOSE 1
 page_t::page_t(mleaf_t& leaf) {
     ((pagenum_t*)a)[0 / 8] = leaf.parent;
@@ -87,6 +87,7 @@ mleaf_t::mleaf_t(page_t& page) : mnode_t(page) {
         std::string value = val;                 // CHECK
         slots.push_back(*slot);
         values.push_back(value);
+        free(slot);
     }
 }
 mleaf_t::mleaf_t(pagenum_t p, u32_t i, u32_t n) : mnode_t(p, i, n) {
@@ -96,13 +97,13 @@ mleaf_t::mleaf_t(pagenum_t p, u32_t i, u32_t n) : mnode_t(p, i, n) {
 }
 mleaf_t::mleaf_t(key__t key, std::string value) : mnode_t(0, 1, 1) {
     free_space = 3968 - value.size() - 12;
-    slots.push_back({key, value.size(), 4096 - value.size()});
+    slots.push_back({key, (u16_t)value.size(), (u16_t)(4096 - (int)value.size())});
     values.push_back(value);
     right_sibling = 0;
 }
 void mleaf_t::push_back(key__t key, std::string value) {
     free_space -= value.size() + 12;
-    slots.push_back({key, value.size(), slots[num_keys - 1].offset - value.size()});
+    slots.push_back({key, (u16_t)value.size(), (u16_t)((int)slots[num_keys - 1].offset - (int)value.size())});
     values.push_back(value);
     ++num_keys;
     return;
