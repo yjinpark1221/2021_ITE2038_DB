@@ -2,6 +2,10 @@
 // #include "page.h"
 #define VERBOSE 1
 page_t::page_t(mleaf_t& leaf) {
+    if (leaf.num_keys != leaf.slots.size() || leaf.num_keys != leaf.values.size()) {
+        perror("leaf to page_t num_key different");
+        exit(0);
+    }
     ((pagenum_t*)a)[0 / 8] = leaf.parent;
     ((u32_t*)a)[8 / 4] = leaf.is_leaf;
     ((u32_t*)a)[12 / 4] = leaf.num_keys;
@@ -15,6 +19,10 @@ page_t::page_t(mleaf_t& leaf) {
     }
 }
 page_t::page_t(minternal_t& node) {
+    if (node.num_keys != node.keys.size() || node.num_keys != node.children.size()) {
+        perror("internal to page_t num_key different");
+        exit(0);
+    }
     ((pagenum_t*)a)[0 / 8] = node.parent;
     ((u32_t*)a)[8 / 4] = node.is_leaf;
     ((u32_t*)a)[12 / 4] = node.num_keys;

@@ -12,27 +12,42 @@
 #include <vector>
 int main(){
     puts("START");
-    int n = 1000;
+    int n = 10000;
     table_t fd = file_open_database_file("deleteMiddleHalf");
     assert(fd > 0);
     for (key__t key = -n; key <= n; ++key) {
         char val[] = "01234567890123456789012345678901234567890123456789";
         int ret = db_insert(fd, key, val, 50);
-        std::cout << "[insert " << key << " / ret = " << ret << "]\n";
-        if (key + n / 2 == n / 5) printf("20%\n");
-        if (key + n / 2 == n * 2 / 5) printf("40%\n");
-        if (key + n / 2 == n * 3 / 5) printf("60%\n");
-        if (key + n / 2 == n * 4 / 5) printf("80%\n");
+        if (ret == 1) {
+            perror("insert failed");
+            exit(0);
+        }
+    if (VERBOSE)            std::cout << "[insert " << key << " / ret = " << ret << "]\n";
     }
     puts(""); puts(""); puts("");
 
     for (key__t key = -n / 2; key <= n / 2; ++key) {
-        int ret = db_delete(fd, key);
-        std::cout << "[delete " << key << " / ret = " << ret << "]\n";
-        if (key + n / 2 == n / 5) printf("20%\n");
-        if (key + n / 2 == n * 2 / 5) printf("40%\n");
-        if (key + n / 2 == n * 3 / 5) printf("60%\n");
-        if (key + n / 2 == n * 4 / 5) printf("80%\n");
+        char ret_val[8000] = { 0, };
+        u16_t val_size;
+    if (VERBOSE)            std::cout << "[find " << key << " / ret = ";
+        int ret = db_find(fd, key, ret_val, &val_size);
+        if (ret) {
+            perror("find failed");
+            exit(0);
+        }
+    if (VERBOSE)            std::cout << ret << " / val = " << ret_val << " / size = " << val_size << "\n";        assert(!ret);
+        ret = db_delete(fd, key);
+//        assert(!ret);
+        if (ret) {
+            perror("delete failed");
+            exit(0);
+        }
+    if (VERBOSE)            std::cout << "[delete " << key << " / ret = " << ret << "]\n";
+        ret = db_find(fd, key, ret_val, &val_size);
+        if (!ret) {
+            perror("delete failed (find success)");
+            exit(0);
+        }
     }
     puts(""); puts(""); puts("");
 
@@ -42,14 +57,11 @@ int main(){
         u16_t val_size;
 
         int ret = db_find(fd, i, ret_val, &val_size);
-        if (i >= -n / 2 && i <= n / 2) {
-            assert(ret);
+        if (i > -n / 2 && i < n / 2) {
             std::cout << "[find " << i << " / ret = " << ret << " / val = " << ret_val << " / size = " << val_size << "\n";
         }
         else {
-            assert(!ret);
             std::cout << "[find " << i << " / ret = " << ret << " / val = " << ret_val << " / size = " << val_size << "\n";
-            assert(val_size ==  50);
         }
         if (ret) v.push_back(i);
     }

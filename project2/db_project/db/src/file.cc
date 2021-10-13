@@ -65,13 +65,13 @@ pagenum_t file_alloc_page(table_t fd) {
         numPage *= 2;
     }
     if (pread(fd, &page, PAGE_SIZE, freePage * PAGE_SIZE) <= 0) {
-        perror("file_use_free_page pread error");
+        perror("file_alloc_page pread error");
         exit(0);
     }//get next free page : ((pagenum_t*)page.a)[0]
     ((pagenum_t*)page.a)[1] = numPage;
     ((pagenum_t*)page.a)[2] = rootPage;
     if (pwrite(fd, &page, PAGE_SIZE, 0) <= 0) {
-        perror("file_use_free_page pread error");
+        perror("file_alloc_page pread error");
         exit(0);
     }
     sync();//change the first free page
