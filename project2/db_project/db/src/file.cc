@@ -1,4 +1,4 @@
-// #include "file.h"
+#include "file.h"
 
 std::vector<table_t> openedFds;
 // Open existing database file or create one if it doesn't exist

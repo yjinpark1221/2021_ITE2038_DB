@@ -3,55 +3,95 @@
 #include <string>
 
 TEST(DeleteTest, middleHalf50_100000) {
+
 #include <cassert>
 #include <string>
 #include <stdio.h>
 #include <vector>
+#include <set>
+
+
 
     puts("START");
-    int n = 100000;
-    table_t fd = file_open_database_file("deleteMiddleHalf");
+    int n = 1000000;
+    table_t fd = file_open_database_file("deleteTest.db");
     ASSERT_TRUE(fd > 0);
+
+    std::set<key__t> inTree;
+
     for (key__t key = -n; key <= n; ++key) {
         char val[] = "01234567890123456789012345678901234567890123456789";
         int ret = db_insert(fd, key, val, 50);
+        inTree.insert(key);
         ASSERT_FALSE(ret) << "[insert " << key << " / ret = " << ret << "]\n";
-        if (key + n / 2 == n / 5) printf("20%\n");
-        if (key + n / 2 == n * 2 / 5) printf("40%\n");
-        if (key + n / 2 == n * 3 / 5) printf("60%\n");
-        if (key + n / 2 == n * 4 / 5) printf("80%\n");
     }
     puts(""); puts(""); puts("");
 
-    for (key__t key = -n / 2; key <= n / 2; ++key) {
-        int ret = db_delete(fd, key);
-        ASSERT_FALSE(ret) <<  "[delete " << key << " / ret = " << ret << "]\n";
-        if (key + n / 2 == n / 5) printf("20%\n");
-        if (key + n / 2 == n * 2 / 5) printf("40%\n");
-        if (key + n / 2 == n * 3 / 5) printf("60%\n");
-        if (key + n / 2 == n * 4 / 5) printf("80%\n");
-    }
-    puts(""); puts(""); puts("");
 
-    std::vector <key__t> v;
-    for (key__t i = -n; i <= n; ++i) {
+    for (key__t key = -n; key <= n; ++key) {
         char ret_val[8000] = { 0, };
         u16_t val_size;
 
-        int ret = db_find(fd, i, ret_val, &val_size);
-        if (i >= -n / 2 && i <= n / 2) {
-            ASSERT_TRUE(ret) << "[find " << i << " / ret = " << ret << " / val = " << ret_val << " / size = " << val_size << "\n";
+        int ret = db_find(fd, key, ret_val, &val_size);
+        if (inTree.find(key) == inTree.end()) {
+            ASSERT_TRUE(ret);
         }
         else {
-            ASSERT_FALSE(ret) << "[find " << i << " / ret = " << ret << " / val = " << ret_val << " / size = " << val_size << "\n";
             ASSERT_EQ(val_size, 50);
+            ASSERT_FALSE(ret) << "[find " << key << " / ret = " << ret << " / size = " << val_size << "]\n";
         }
-        if (ret) v.push_back(i);
     }
-    puts(""); puts(""); puts(""); puts(""); puts("");
-    printf("[NOT FOUND] -> [%lu]\n", v.size());
-    for (auto& it : v) printf("%d ", it); puts("");
-    remove("deleteMiddleHalf");
+    puts(""); puts(""); puts(""); 
+
+    for (key__t key = -n; key <= n; ++key) {
+        char val[] = "01234567890123456789012345678901234567890123456789";
+        int ret = db_delete(fd, key);
+        inTree.erase(key);
+        ASSERT_FALSE(ret) << "[delete " << key << " / ret = " << ret << "]\n";
+    }
+    puts(""); puts(""); puts(""); 
+
+
+    for (key__t key = -n; key <= n; ++key) {
+        char ret_val[8000] = { 0, };
+        u16_t val_size;
+
+        int ret = db_find(fd, key, ret_val, &val_size);
+        if (inTree.find(key) == inTree.end()) {
+            ASSERT_TRUE(ret);
+        }
+        else {
+            ASSERT_EQ(val_size, 50);
+            ASSERT_FALSE(ret) << "[find " << key << " / ret = " << ret << " / size = " << val_size << "]\n";
+        }
+    }
+    puts(""); puts(""); puts(""); 
+
+    for (key__t key = -n; key <= n; ++key) {
+        char val[] = "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+        int ret = db_insert(fd, key, val, 112);
+        inTree.insert(key);
+        ASSERT_FALSE(ret) << "[insert " << key << " / ret = " << ret << "]\n";
+    }
+    puts(""); puts(""); puts("");
+
+
+    for (key__t key = -n; key <= n; ++key) {
+        char ret_val[8000] = { 0, };
+        u16_t val_size;
+
+        int ret = db_find(fd, key, ret_val, &val_size);
+        if (inTree.find(key) == inTree.end()) {
+            ASSERT_TRUE(ret);
+        }
+        else {
+            ASSERT_EQ(val_size, 112);
+            ASSERT_FALSE(ret) << "[find " << key << " / ret = " << ret << " / size = " << val_size << "]\n";
+        }
+    }
+    puts(""); puts(""); puts(""); 
+
+    remove("ascEven50_10000");
 }
 
 // TEST(InsertTest, descEvenLen112_10000) {
