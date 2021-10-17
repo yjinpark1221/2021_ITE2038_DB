@@ -12,7 +12,7 @@ TEST(DeleteTest, freePageTest) {
 
 
     puts("START");
-    int n = 10000;
+    int n = 100000;
     table_t fd = file_open_database_file("deleteFreeTest.db");
     ASSERT_TRUE(fd > 0);
 
@@ -50,7 +50,7 @@ TEST(DeleteTest, freePageTest) {
     puts(""); puts(""); puts(""); 
 
 
-    for (key__t key = -n; key <= n; ++key) {
+    for (key__t i = -n; i <= n; ++i) {
         char ret_val[8000] = { 0, };
         u16_t val_size;
 
@@ -78,8 +78,8 @@ TEST(DeleteTest, randomNullTest) {
 #include <set>
 
     puts("START");
-    bool inTree[1000001];
-    key__t n = 10000;
+    bool inTree[100001];
+    key__t n = 100000;
     table_t fd = file_open_database_file("randomDelete.db");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;
@@ -144,11 +144,10 @@ TEST(DeleteTest, randomNullTest) {
 
 TEST(DeleteTest, randomAllTest) {
     #include <set>
-int main(){
 
     puts("START");
-    bool inTree[10001];
-    key__t n = 10000;
+    bool inTree[100001];
+    key__t n = 100000;
     table_t fd = file_open_database_file("randomAll.db");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;

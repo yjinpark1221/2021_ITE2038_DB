@@ -1,4 +1,4 @@
-#define MainTest
+#define MAINTEST
 #include "../db/include/file.h"
 #include "../db/include/page.h"
 #include "../db/include/yjinbpt.h"

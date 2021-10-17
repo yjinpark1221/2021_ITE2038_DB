@@ -4,7 +4,7 @@
 
 #include <cassert>
 #include <iostream>
-#define VERBOSE 0
+#define VERBOSE 1
 // FUNCTION DEFINITIONS.
 
 // 1. int64_t open_table (char *pathname);
@@ -31,9 +31,8 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
     /* Create a new record for the
      * value.>
      */
-    memcpy(tmpv, value, val_size);
-    tmpv[val_size] = 0;
-    std::string svalue = tmpv;
+    std::string svalue = "";
+    svalue.append((const char*) value, val_size);
 
     pagenum_t pn = get_root_page(table_id);
 
@@ -67,6 +66,8 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
 // If success, return 0. Otherwise, return non-zero value.
 // • The “caller” should allocate memory for a record structure (ret_val).
 int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
+    if(VERBOSE) printf("%s\n", __func__);
+    int i;
     page_t page;
     mleaf_t leaf;
     pagenum_t pn = find_leaf_page(fd, key);
@@ -80,8 +81,11 @@ int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
         i = iter - leaf.slots.begin();
-        memcpy(ret_val, leaf.values[i].c_str(), leaf.slots[i].size);
-        ret_val[leaf.slots[i].size] = 0;
+        for (int j = 0; j < leaf.slots[i].size; ++j) {
+            ret_val[j] = leaf.values[i][j];
+            // printf("%d", ret_val[j]);
+        }
+        // ret_val[leaf.slots[i].size] = 0;
         *val_size = leaf.slots[i].size;
         return 0;
     }
@@ -92,10 +96,6 @@ int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
     }
 }
 
-<<<<<<< HEAD
-=======
-void print(minternal_t&);
->>>>>>> 9062e9a1ba7de38e68357159fd95bfb0b1fb7445
 // 4. int db_delete (int64_t table_id, int64_t key);
 // • Find the matching record and delete it if found.
 // • If success, return 0. Otherwise, return non-zero value.
@@ -742,7 +742,7 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
 
         --internal.num_keys;
         page = internal;
-    if (VERBOSE)print(internal);
+        if (VERBOSE)print(internal);
         file_write_page(fd, pn, &page);
     }
 }

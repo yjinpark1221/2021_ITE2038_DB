@@ -16,8 +16,9 @@ page_t::page_t(mleaf_t& leaf) {
     for (u32_t i = 0; i < leaf.num_keys; ++i) {
         slot_t slot = &(leaf.slots[i]);
         ((slot_t*)(a + 128))[i] = slot;
-        char* value = const_cast<char*>(leaf.values[i].c_str());
-        memcpy(a + leaf.slots[i].offset, value, leaf.slots[i].size);
+        for (int j = 0; j < leaf.slots[i].size; ++j) {
+            *(a + leaf.slots[i].offset + j) = leaf.values[i][j];
+        }
     }
 }
 page_t::page_t(minternal_t& node) {
@@ -91,12 +92,12 @@ mleaf_t::mleaf_t(page_t& page) : mnode_t(page) {
     right_sibling = ((pagenum_t*)page.a)[120 / 8];
     for (u32_t i = 0; i < num_keys; ++i) {
         mslot_t* slot = new mslot_t((slot_t*)(page.a + 128) + i);
-        char val[123];
-        memcpy(val, page.a + slot->offset, slot->size);
-        val[slot->size] = '\0';
-        std::string value = val;                 // CHECK
+        std::string val;
+        for (int j = 0; j < slot->size; ++j) {
+            val.push_back(*(page.a + slot->offset + j)); 
+        }
         slots.push_back(*slot);
-        values.push_back(value);
+        values.push_back(val);
         free(slot);
     }
 }
