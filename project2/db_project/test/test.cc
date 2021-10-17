@@ -33,8 +33,8 @@ int main(){
         //ASSERT_FALSE(ret) << "[insert " << i << " / ret = " << ret << "]\n";
     }
     puts(""); puts(""); puts("");
-
-    random_shuffle(randomVec.begin(), randomVec.end());
+    print_tree(fd);
+    // random_shuffle(randomVec.begin(), randomVec.end());
     for (key__t key : randomVec) {
         if (key % 1000 == 0) printf("finding %d\n", key);
         char ret_val[8000] = { 0, };
@@ -58,17 +58,18 @@ int main(){
     }
     puts(""); puts(""); puts("");
 
-    random_shuffle(randomVec.begin(), randomVec.end());
+    // random_shuffle(randomVec.begin(), randomVec.end());
     for (key__t key : randomVec) {
-        if (key % 1000 == 0) printf("deleting %d\n", key);
+        printf("deleting %d\n", key);
         int ret = db_delete(fd, key);
         inTree[key] = 0;
         assert(ret == 0);
         //  << "[delete " << key << " / ret = " << ret << "]\n";
     }
     puts(""); puts(""); puts("");
+    print_tree(fd);
 
-    random_shuffle(randomVec.begin(), randomVec.end());
+    // random_shuffle(randomVec.begin(), randomVec.end());
     for (key__t key : randomVec) {
         if (key % 1000 == 0) printf("finding %d\n", key);
         char ret_val[8000] = { 0, };
@@ -92,7 +93,7 @@ int main(){
     }
     puts(""); puts(""); puts("");
 
-    random_shuffle(randomVec.begin(), randomVec.end());
+    // random_shuffle(randomVec.begin(), randomVec.end());
     for (key__t key : randomVec) {
         if (key % 1000 == 0) printf("inserting %d\n", key);
         char val[] = "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
@@ -104,7 +105,7 @@ int main(){
     }
     puts(""); puts(""); puts("");
 
-    random_shuffle(randomVec.begin(), randomVec.end());
+    // random_shuffle(randomVec.begin(), randomVec.end());
     for (key__t key : randomVec) {
         if (key % 1000 == 0) printf("finding %d\n", key);
         char ret_val[8000] = { 0, };
@@ -126,7 +127,9 @@ int main(){
             }
         }
     }
+    print_tree(fd);
     puts(""); puts(""); puts("");
-
+    puts("done\n");
     remove("tmp.db");
+    return 0;
 }

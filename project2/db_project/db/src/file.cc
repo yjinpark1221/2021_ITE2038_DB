@@ -25,7 +25,6 @@ table_t file_open_database_file(const char* pathname) {
         fd = open(pathname, O_RDWR | O_CREAT, 0644);
         if (fd < 0) {
             perror("in file_open_database_file negative fd");
-            exit(0);
             return fd;
         } // controlled in higher layer
         pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);

@@ -16,29 +16,23 @@ TEST(DeleteTest, freePageTest) {
     table_t fd = file_open_database_file("deleteFreeTest.db");
     ASSERT_TRUE(fd > 0);
 
-    std::set<key__t> inTree;
-
     for (key__t key = -n; key <= n; ++key) {
         char val[] = "01234567890123456789012345678901234567890123456789";
         int ret = db_insert(fd, key, val, 50);
-        inTree.insert(key);
         ASSERT_FALSE(ret) << "[insert " << key << " / ret = " << ret << "]\n";
     }
     puts(""); puts(""); puts("");
 
+    printf("print tree\n");
+    print_tree(fd);
 
     for (key__t key = -n; key <= n; ++key) {
         char ret_val[8000] = { 0, };
         u16_t val_size;
 
         int ret = db_find(fd, key, ret_val, &val_size);
-        if (inTree.find(key) == inTree.end()) {
-            ASSERT_TRUE(ret);
-        }
-        else {
-            ASSERT_EQ(val_size, 50);
-            ASSERT_FALSE(ret) << "[find " << key << " / ret = " << ret << " / size = " << val_size << "]\n";
-        }
+        ASSERT_EQ(val_size, 50);
+        ASSERT_FALSE(ret) << "[find " << key << " / ret = " << ret << " / size = " << val_size << "]\n";
     }
     puts(""); puts(""); puts(""); 
 
@@ -49,20 +43,22 @@ TEST(DeleteTest, freePageTest) {
     }
     puts(""); puts(""); puts(""); 
 
+    printf("print tree\n");
+    print_tree(fd);
 
     for (key__t i = -n; i <= n; ++i) {
         char ret_val[8000] = { 0, };
         u16_t val_size;
 
         int ret = db_find(fd, i, ret_val, &val_size);
-        ASSERT_FALSE(ret) << "[find " << i << " / ret = " << ret << " / val = " << ret_val << " / size = " << val_size << "\n";
-        ASSERT_EQ(val_size, 50);
+        ASSERT_TRUE(ret) << "[find " << i << " / ret = " << ret << " / val = " << ret_val << " / size = " << val_size << "\n";
     }
     puts(""); puts(""); puts(""); puts(""); puts("");
 
 
     std::vector<pagenum_t> v = file_get_free_list(fd);
-    for (pagenum_t i = 0; i < 2560; ++i) {
+    for (pagenum_t i = 1; i < 2560; ++i) {
+        printf("test invec %d\n", i);
         ASSERT_TRUE(inVec(v, i));
     }
 
@@ -225,7 +221,7 @@ TEST(DeleteTest, randomAllTest) {
             ASSERT_TRUE(ret);
         }
         else {
-            ASSERT_TRUE(val_size == 50);
+            ASSERT_TRUE(val_size == 112);
             ASSERT_TRUE(ret == 0) << "[find " << key << " / ret = " << ret << " / size = " << val_size << " / val = ";
         }
     }

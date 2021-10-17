@@ -4,7 +4,7 @@
 
 #include <cassert>
 #include <iostream>
-#define VERBOSE 1
+#define VERBOSE 0
 // FUNCTION DEFINITIONS.
 
 // 1. int64_t open_table (char *pathname);
@@ -759,7 +759,7 @@ int adjust_root(table_t fd, pagenum_t pn) {
      * so nothing to be done.
      */
     if (node.num_keys > 0) {
-    if (VERBOSE)printf("nonempty root");
+        if (VERBOSE) printf("nonempty root");
         return 0;
     }
 
@@ -767,14 +767,16 @@ int adjust_root(table_t fd, pagenum_t pn) {
      */
 
     file_free_page(fd, pn);
-    pagenum_t new_root_pn;
+    pagenum_t new_root_pn = 0;
 
     // If it has a child, promote 
     // the first (only) child
     // as the new root.
     if (!node.is_leaf) {
+        printf("case inter\n");
         minternal_t internal = page;
         new_root_pn = internal.first_child;
+        printf("read new root %d\n", new_root_pn);
         file_read_page(fd, new_root_pn, &page);
         ((pagenum_t*)page.a)[0] = 0;
         file_write_page(fd, new_root_pn, &page);
@@ -782,6 +784,7 @@ int adjust_root(table_t fd, pagenum_t pn) {
 
     // If it is a leaf (has no children),
     // then the whole tree is empty.
+    printf("case leaf\n");
     file_read_page(fd, 0, &page);
     ((pagenum_t*)page.a)[2] = new_root_pn;
     file_write_page(fd, 0, &page);
