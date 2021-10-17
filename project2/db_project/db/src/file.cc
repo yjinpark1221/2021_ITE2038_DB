@@ -1,6 +1,16 @@
-// #include "file.h"
+#ifndef MAINTEST
+#include "file.h"
+#endif
 
-std::vector<table_t> openedFds;
+std::vector<int> openedFds;
+std::map<int, table_t> fd2table;
+std::map<table_t, int> table2fd;
+
+table_t next_table_id() {
+    static table_t table_id = 1;
+    return table_id++;
+}
+
 // Open existing database file or create one if it doesn't exist
 // int file_open_database_file (const char * pathname)
 // • Open the database file.
@@ -9,7 +19,8 @@ std::vector<table_t> openedFds;
 // • Then it returns the file descriptor of the opened database file.
 // • All other 5 commands below should be handled after open data file.
 table_t file_open_database_file(const char* pathname) {
-    table_t fd = open(pathname, O_RDWR);
+    int fd = open(pathname, O_RDWR);
+
     if (fd < 0) {
         fd = open(pathname, O_RDWR | O_CREAT, 0644);
         if (fd < 0) {
@@ -36,8 +47,12 @@ table_t file_open_database_file(const char* pathname) {
         }
         free(buf);
     }
+    table_t table_id = next_table_id();
+    fd2table[fd] = table_id;
+    table2fd[table_id] = fd;
+
     openedFds.push_back(fd);
-    return fd;
+    return table_id;
 }
 
 // Allocate an on-disk page from the free page list
@@ -45,7 +60,8 @@ table_t file_open_database_file(const char* pathname) {
 // • Allocate a page.
 // • It returns a new page # from the free page list.
 // • If the free page list is empty, then it should grow the database file and return a free page #.
-pagenum_t file_alloc_page(table_t fd) {
+pagenum_t file_alloc_page(table_t table_id) {
+    int fd = table2fd[table_id];
     page_t page;
     if (pread(fd, &page, PAGE_SIZE, 0) <= 0) {
         perror("file_alloc_page pread error");
@@ -82,7 +98,8 @@ pagenum_t file_alloc_page(table_t fd) {
 // void file_free_page (int fd, uint64_t page_number);
 // • Free a page.
 // • It informs the disk space manager of returning the page with ‘page_number’ for freeing it to the free page list.
-void file_free_page(table_t fd, pagenum_t pagenum) {
+void file_free_page(table_t table_id, pagenum_t pagenum) {
+    int fd = table2fd[table_id];
     pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
     if (pread(fd, buf, PAGE_SIZE, 0) <= 0) {
         perror("file_free_page pread error");
@@ -108,7 +125,8 @@ void file_free_page(table_t fd, pagenum_t pagenum) {
 // Read an on-disk page into the in-memory page structure(dest)
 // file_read_page <page_number, dest> - read page
 // • It fetches the disk page corresponding to ‘page_number’ to the in-memory buffer (i.e., ‘dest’).
-void file_read_page(table_t fd, pagenum_t pagenum, page_t* dest) {
+void file_read_page(table_t table_id, pagenum_t pagenum, page_t* dest) {
+    int fd = table2fd[table_id];
     if (dest == NULL) {
         perror("file_read_page dest NULL");
         exit(0);
@@ -123,7 +141,8 @@ void file_read_page(table_t fd, pagenum_t pagenum, page_t* dest) {
 // void file_write_page (int fd, uint64_t page_number, const char * src);
 // • Write a page.
 // • It writes the in-memory page content in the buffer (i.e., ‘src’) to the disk page pointed by ‘page_number’
-void file_write_page(table_t fd, pagenum_t pagenum, const page_t* src) {
+void file_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
+    int fd = table2fd[table_id];
     if (src == NULL) {
         perror("file_write_page src NULL");
         exit(0);
@@ -140,19 +159,22 @@ void file_write_page(table_t fd, pagenum_t pagenum, const page_t* src) {
 // • Close the database file.
 // • This API doesn’t receive a file descriptor as a parameter. So a means for referencing the descriptor of the opened file(i.e., global variable) is required.
 void file_close_database_file(){
-    for (table_t fd : openedFds) {
+    for (int fd : openedFds) {
         if (fd > 0 && close(fd) < 0) {
             perror("file_close_database_file close error");
             exit(0);
         }
     }
+    fd2table.clear();
+    table2fd.clear();
     openedFds.clear();
 }
 
 /// below are the APIs for testing ///
 
 // gets file size from the header page
-pagenum_t file_get_size(table_t fd) {
+pagenum_t file_get_size(table_t table_id) {
+    int fd = table2fd[table_id];
     pagenum_t buf;
     pread(fd, &buf, sizeof(pagenum_t), sizeof(pagenum_t));
     return buf;
@@ -167,7 +189,8 @@ bool inVec(std::vector<pagenum_t> vec, pagenum_t page) {
 }
 
 // gets the free page list as a vector
-std::vector<pagenum_t> file_get_free_list(table_t fd) {
+std::vector<pagenum_t> file_get_free_list(table_t table_id) {
+    int fd = table2fd[table_id];
     pagenum_t pagenum = lseek(fd, 0, SEEK_END) / PAGE_SIZE;
     std::vector<pagenum_t> vec;
     pagenum_t* buf = (pagenum_t*) malloc(PAGE_SIZE * pagenum);

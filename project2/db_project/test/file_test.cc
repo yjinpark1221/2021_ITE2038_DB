@@ -81,17 +81,3 @@ TEST(FileTest, CheckReadWriteOperation) {
   file_close_database_file();
   remove("readWriteTest");
 }
-
-
-
-
-// TEST(IndexTest, FindTest100000) {
-//   int fd = file_open_database_file("insertTest.dat");
-//   print_tree(fd);
-//   for (int i = 1; i < 100000; ++i) {
-//         char ret_val[10000];
-//         u16_t val_size;
-//         ASSERT_FALSE(db_find(fd, i, ret_val, &val_size));
-//         ASSERT_TRUE(db_find(fd, i + 1000005, ret_val, &val_size));
-//   }
-// }

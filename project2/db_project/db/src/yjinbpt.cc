@@ -1,4 +1,7 @@
-// #include "../include/yjinbpt.h"
+#ifndef MAINTEST
+#include "yjinbpt.h"
+#endif
+
 #include <cassert>
 #include <iostream>
 #define VERBOSE 0
@@ -16,7 +19,7 @@ table_t open_table(char* pathname) {
 // • Insert input ‘key/value’ (record) with its size to data file at the right place.
 // • If success, return 0. Otherwise, return non-zero value.
 int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
-    if (VERBOSE)    printf("%s\n", __func__);
+    if (VERBOSE)printf("%s\n", __func__);
     char tmpv[123];
     u16_t tmps;
     mleaf_t leaf;
@@ -26,7 +29,7 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
         return 1;                           // insert fail
     }
     /* Create a new record for the
-     * value.
+     * value.>
      */
     memcpy(tmpv, value, val_size);
     tmpv[val_size] = 0;
@@ -64,7 +67,6 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
 // If success, return 0. Otherwise, return non-zero value.
 // • The “caller” should allocate memory for a record structure (ret_val).
 int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
-    int i = 0;
     page_t page;
     mleaf_t leaf;
     pagenum_t pn = find_leaf_page(fd, key);
@@ -89,7 +91,6 @@ int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
         return 1;
     }
 }
-
 
 // 4. int db_delete (int64_t table_id, int64_t key);
 // • Find the matching record and delete it if found.
@@ -313,6 +314,8 @@ int cut_leaf(mleaf_t* leaf) {
 }
 
 void print(mleaf_t& leaf) {
+    if (VERBOSE  == 0) return;
+    puts("----------");
     printf("printing leaf\n");
     printf("parent %d\n", leaf.parent);
     printf("numkeys %d\n", leaf.num_keys);
@@ -320,9 +323,13 @@ void print(mleaf_t& leaf) {
     for (int i = 0; i < leaf.num_keys; ++i) {
         printf("slots[i] : %d %d %d\tvalues[i] : %s\n", leaf.slots[i].key, leaf.slots[i].size, leaf.slots[i].offset, leaf.values[i].c_str());
     }
+    puts("----------");
+    puts("");
 }
 
 void print(minternal_t& internal) {
+    if (VERBOSE  == 0) return;
+    puts("----------");
     printf("\nprinting internal\n");
     printf("parent %d\n", internal.parent);
     printf("numkeys %d\n", internal.num_keys);
@@ -330,8 +337,10 @@ void print(minternal_t& internal) {
     for (int i = 0; i < internal.num_keys; ++i) {
         printf("keys[i] : %d \tchildren[i] : %d\n", internal.keys[i], internal.children[i]);
     }
+    puts("----------");
     puts("");
 }
+
 // INSERTION
 
 
@@ -652,7 +661,7 @@ pagenum_t start_new_tree(table_t fd, key__t key, std::string value) {
 // if pn is leftmost(first_child) -> -1
 // else index
 int get_index(table_t fd, pagenum_t pn) {
-    if (VERBOSE)        printf("%s %d %d\n", __func__, fd, pn);
+    if (VERBOSE)("%s %d %d\n", __func__, fd, pn);
     /* Return the index of the key to the left
      * of the pointer in the parent pointing
      * to n.  
@@ -666,7 +675,7 @@ int get_index(table_t fd, pagenum_t pn) {
 
     file_read_page(fd, node.parent, &parent_page);
     minternal_t internal = parent_page;
-    if (VERBOSE)        print(internal);
+    if (VERBOSE)print(internal);
     for (int i = 0; i <= internal.num_keys; ++i) {
         if (internal.children[i] == pn) {
             return i;
@@ -681,17 +690,17 @@ int get_index(table_t fd, pagenum_t pn) {
 
 
 void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
-    if (VERBOSE)        printf("%s %d %d\n", __func__, pn, key);
+    if (VERBOSE)printf("%s %d %d\n", __func__, pn, key);
     page_t page;
     file_read_page(fd, pn, &page);
     mnode_t node = page;
     if (node.is_leaf) {
         mleaf_t leaf = page;
         mslot_t slot = key;
-    if (VERBOSE)            print(leaf);
+    if (VERBOSE)print(leaf);
         auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key); 
         int index = iter - leaf.slots.begin();
-    if (VERBOSE)            printf("index %d\n", index);
+    if (VERBOSE)printf("index %d\n", index);
         for (int i = index; i < leaf.num_keys - 1; ++i) {
             leaf.slots[i] = leaf.slots[i + 1];
             leaf.values[i] = leaf.values[i + 1];
@@ -701,14 +710,16 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
         --leaf.num_keys;
         adjust(leaf); // adjust offset and free_space
         page = leaf;
-    if (VERBOSE)            print(leaf);
+    if (VERBOSE)print(leaf);
         file_write_page(fd, pn, &page);
     }
     else {
         minternal_t internal = page;
-    if (VERBOSE)            print(internal);
+        if (VERBOSE)print(internal);
+        if (VERBOSE)printf("case internal\n");
         auto iter = std::lower_bound(internal.keys.begin(), internal.keys.end(), key);
         int index = iter - internal.keys.begin();
+        if (VERBOSE) printf("index %d\n", index);
         if (index < -1 || index > internal.num_keys) {
             perror("in remove_entry_from_node wrong internal index");
             exit(0);
@@ -720,18 +731,16 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
         internal.keys.erase(internal.keys.begin() + index, internal.keys.begin() + index + 1);
         internal.children.erase(internal.children.begin() + index, internal.children.begin() + index + 1);
 
-        internal.keys.resize(internal.num_keys - 1);
-        internal.children.resize(internal.num_keys - 1);
         --internal.num_keys;
         page = internal;
-    if (VERBOSE)            print(internal);
+    if (VERBOSE)print(internal);
         file_write_page(fd, pn, &page);
     }
 }
 
 
 int adjust_root(table_t fd, pagenum_t pn) {
-    if (VERBOSE)        printf("%s\n", __func__);
+    if (VERBOSE)printf("%s\n", __func__);
     page_t page;
     file_read_page(fd, pn, &page);
     mnode_t node = page;
@@ -741,15 +750,13 @@ int adjust_root(table_t fd, pagenum_t pn) {
      * so nothing to be done.
      */
     if (node.num_keys > 0) {
-    if (VERBOSE)            printf("nonempty root");
-//        print_leaves(fd);
+    if (VERBOSE)printf("nonempty root");
         return 0;
     }
 
     /* Case: empty root. 
      */
 
-// TODO : check file_free_page
     file_free_page(fd, pn);
     pagenum_t new_root_pn;
 
@@ -780,7 +787,7 @@ int adjust_root(table_t fd, pagenum_t pn) {
  * without exceeding the maximum.
  */
 int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*index of pn*/, int k_prime) {
-    if (VERBOSE)        printf("%s %d %d %d %d\n", __func__, pn, neighbor_pn, index, k_prime);
+    if (VERBOSE) printf("%s %d %d %d %d\n", __func__, pn, neighbor_pn, index, k_prime);
     /* Swap neighbor with node if node is on the
      * extreme left and neighbor is to its right.
      * after this, neighbor is on the left of node
@@ -795,7 +802,6 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
     file_read_page(fd, pn, &page);
     file_read_page(fd, neighbor_pn, &neighbor_page);
     mnode_t node = page, neighbor = neighbor_page;
-    if (VERBOSE)        printf("%d %d \n", node.parent, neighbor.parent);
     /* Starting point in the neighbor for copying
      * keys and pointers from n.
      * Recall that n and neighbor have swapped places
@@ -815,17 +821,19 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         neighbor_internal.children.push_back(internal.first_child);
         neighbor_internal.keys.insert(neighbor_internal.keys.end(), internal.keys.begin(), internal.keys.end());
         neighbor_internal.children.insert(neighbor_internal.children.end(), internal.children.begin(), internal.children.end());
+        int update_index = neighbor_internal.num_keys;
         neighbor_internal.num_keys += internal.num_keys + 1;
         neighbor_page = neighbor_internal;
         file_write_page(fd, neighbor_pn, &neighbor_page);
 
         /* All children must now point up to the same parent.
          */
-        for (int i = neighbor_internal.num_keys; i <= neighbor_internal.num_keys + internal.num_keys; ++i) {
+        for (int i = update_index; i < neighbor_internal.num_keys; ++i) {
             pagenum_t child_pn = neighbor_internal.children[i];
             page_t child_page;
             file_read_page(fd, child_pn, &child_page);
             ((pagenum_t*)child_page.a)[0] = neighbor_pn;
+            file_write_page(fd, child_pn, &child_page);
         }
     }
 
@@ -835,7 +843,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
      * what had been n's right neighbor.
      */
     else {
-    if (VERBOSE)            printf("case leaf\n");
+    if (VERBOSE)printf("case leaf\n");
         mleaf_t leaf = page, neighbor_leaf = neighbor_page;
         neighbor_leaf.right_sibling = leaf.right_sibling;
         for (int i = 0; i < leaf.num_keys; ++i) {
@@ -858,8 +866,8 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
  * small node's entries without exceeding the
  * maximum
  */
-int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index, int k_prime_index, int k_prime) {
-    if (VERBOSE)        printf("%s\n", __func__);
+int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*pn's index*/, int k_prime_index, int k_prime) {
+    if (VERBOSE)printf("%s\n", __func__);
     page_t page, neighbor_page;
     file_read_page(fd, pn, &page);
     file_read_page(fd, neighbor_pn, &neighbor_page);
@@ -928,8 +936,8 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
     else {
         if (node.is_leaf) {
             mleaf_t leaf = page, neighbor_leaf = neighbor_page;
-    if (VERBOSE)                print(leaf);
-    if (VERBOSE)                print(neighbor_leaf);
+            if (VERBOSE)print(leaf);
+            if (VERBOSE)print(neighbor_leaf);
             leaf.slots.insert(leaf.slots.begin(), neighbor_leaf.slots[neighbor_leaf.num_keys - 1]);
             leaf.values.insert(leaf.values.begin(), neighbor_leaf.values[neighbor_leaf.num_keys - 1]);
             neighbor_leaf.slots.pop_back();
@@ -942,14 +950,14 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             page_t parent_page;
             file_read_page(fd, leaf.parent, &parent_page);
             minternal_t parent = parent_page;
-    if (VERBOSE)                printf("parent\n");
-    if (VERBOSE)                print(parent);
+            if (VERBOSE)printf("parent\n");
+            if (VERBOSE)print(parent);
             parent.keys[k_prime_index] = leaf.slots[0].key;
             parent_page = parent;
             file_write_page(fd, leaf.parent, &parent_page);
 
-    if (VERBOSE)                print(leaf);
-    if (VERBOSE)                print(neighbor_leaf);
+            if (VERBOSE)print(leaf);
+            if (VERBOSE)print(neighbor_leaf);
             page = leaf;
             neighbor_page = neighbor_leaf;
         }
@@ -993,12 +1001,14 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
  */
 
 int delete_entry(table_t fd, pagenum_t pn, key__t key) {
-    if (VERBOSE)        printf("%s\n", __func__);
+    if (VERBOSE)printf("%s\n", __func__);
     // Remove key and pointer from node.
     remove_entry_from_node(fd, pn, key);
     
     /* Case:  deletion from the root. 
      */
+    if(VERBOSE) printf("after removing entry\n");
+    if(VERBOSE)printf("root %d\n", get_root_page(fd));
     if (pn == get_root_page(fd)) {
         return adjust_root(fd, pn);
     }
@@ -1011,13 +1021,15 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
      * to be preserved after deletion.
      */
      
-     page_t page;
-     file_read_page(fd, pn, &page);
-     mnode_t node = page;
+    page_t page;
+    file_read_page(fd, pn, &page);
+    mnode_t node = page;
 
     if (node.is_leaf) {
+        if(VERBOSE) printf("case leaf\n");
         mleaf_t leaf = page;
-
+        if(VERBOSE)print(leaf);
+    
         /* Case:  node stays at or above minimum.
         * (The simple case.)
         */
@@ -1026,12 +1038,14 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
         }
     }
     else {
-        mleaf_t leaf = page;
+        if(VERBOSE) printf("case inter\n");
+        minternal_t internal = page;
 
         /* Case:  node stays at or above minimum.
         * (The simple case.)
         */
-        if (leaf.num_keys >= 124) {
+        if (internal.num_keys >= 124) {
+            if (VERBOSE)printf("simple case\n");
             return 0;
         }
     }
@@ -1048,7 +1062,7 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
     * to the neighbor.
     */
     int index = get_index(fd, pn), neighbor_index, k_prime_index;
-    if (VERBOSE)        printf("index %d\n", index);
+    if (VERBOSE)printf("index %d\n", index);
     if (index == -1) { // leftmost -> right neighbor
         neighbor_index = 0;
         k_prime_index = 0;
@@ -1079,7 +1093,8 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
     if (node.is_leaf) {
         mleaf_t neighbor_leaf = neighbor_page;
         mleaf_t leaf = page;
-    if (VERBOSE)            printf("nei free : %d\tleaf free : %d\n", neighbor_leaf.free_space, leaf.free_space);
+        if (VERBOSE)printf("nei free : %d\tleaf free : %d\n", neighbor_leaf.free_space, leaf.free_space);
+        
         /* Coalescence. */
         if (neighbor_leaf.free_space >= 3968 - leaf.free_space) {
             return coalesce_nodes(fd, pn, neighbor_pn, index, k_prime);
@@ -1087,7 +1102,7 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
 
         /* Redistribution. */
         else {
-            return redistribute_nodes(fd, pn, neighbor_pn, neighbor_index, k_prime_index, k_prime);
+            return redistribute_nodes(fd, pn, neighbor_pn, index, k_prime_index, k_prime);
         }
     }
 
@@ -1099,26 +1114,6 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
 
     /* Redistribution. */
     else {
-        return redistribute_nodes(fd, pn, neighbor_pn, neighbor_index, k_prime_index, k_prime);
+        return redistribute_nodes(fd, pn, neighbor_pn, index, k_prime_index, k_prime);
     }
 }
-
-
-// void destroy_tree_nodes(node * root) {
-//     int i;
-//     if (root->is_leaf)
-//         for (i = 0; i < root->num_keys; i++)
-//             free(root->pointers[i]);
-//     else
-//         for (i = 0; i < root->num_keys + 1; i++)
-//             destroy_tree_nodes((node *)root->pointers[i]);
-//     free(root->pointers);
-//     free(root->keys);
-//     free(root);
-// }
-
-
-// node * destroy_tree(node * root) {
-//     destroy_tree_nodes(root);
-//     return NULL;
-// }

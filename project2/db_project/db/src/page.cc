@@ -1,5 +1,7 @@
-// page.h
-// #include "page.h"
+#ifndef MAINTEST
+#include "page.h"
+#endif
+
 #define VERBOSE 1
 page_t::page_t(mleaf_t& leaf) {
     if (leaf.num_keys != leaf.slots.size() || leaf.num_keys != leaf.values.size()) {

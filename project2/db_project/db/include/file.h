@@ -1,6 +1,8 @@
 #ifndef __FILE_H__
 #define __FILE_H__
 #include "page.h"
+#include <map>
+table_t next_table_id();
 
 // 1. int64_t file_open_table_file (const char * pathname)
 // • Open the table file.

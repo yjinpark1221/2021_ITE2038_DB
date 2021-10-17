@@ -75,6 +75,8 @@ pagenum_t get_root_page(table_t fd);
 void print_tree(table_t fd);
 pagenum_t find_leaf_page(table_t fd, key__t key);
 bool cmp_slot(mslot_t a, mslot_t b);
+void print(mleaf_t&);
+void print(minternal_t&);
 
 int cut(int length);
 int cut_leaf(mleaf_t* leaf);
