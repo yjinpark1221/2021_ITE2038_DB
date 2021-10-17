@@ -7,26 +7,50 @@ TEST(DeleteTest, freePageTest) {
 #include <string>
 #include <stdio.h>
 #include <vector>
+#include <set>
+
+
 
     puts("START");
     int n = 10000;
     table_t fd = file_open_database_file("deleteFreeTest.db");
     ASSERT_TRUE(fd > 0);
+
+    std::set<key__t> inTree;
+
     for (key__t key = -n; key <= n; ++key) {
         char val[] = "01234567890123456789012345678901234567890123456789";
         int ret = db_insert(fd, key, val, 50);
+        inTree.insert(key);
         ASSERT_FALSE(ret) << "[insert " << key << " / ret = " << ret << "]\n";
     }
     puts(""); puts(""); puts("");
 
-    for (key__t key = -n / 2; key <= n / 2; ++key) {
+
+    for (key__t key = -n; key <= n; ++key) {
+        char ret_val[8000] = { 0, };
+        u16_t val_size;
+
+        int ret = db_find(fd, key, ret_val, &val_size);
+        if (inTree.find(key) == inTree.end()) {
+            ASSERT_TRUE(ret);
+        }
+        else {
+            ASSERT_EQ(val_size, 50);
+            ASSERT_FALSE(ret) << "[find " << key << " / ret = " << ret << " / size = " << val_size << "]\n";
+        }
+    }
+    puts(""); puts(""); puts(""); 
+
+    for (key__t key = -n; key <= n; ++key) {
+        char val[] = "01234567890123456789012345678901234567890123456789";
         int ret = db_delete(fd, key);
         ASSERT_FALSE(ret) <<  "[delete " << key << " / ret = " << ret << "]\n";
     }
-    puts(""); puts(""); puts("");
+    puts(""); puts(""); puts(""); 
 
-    std::vector <key__t> v;
-    for (key__t i = -n; i <= n; ++i) {
+
+    for (key__t key = -n; key <= n; ++key) {
         char ret_val[8000] = { 0, };
         u16_t val_size;
 

@@ -92,10 +92,19 @@ int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
     }
 }
 
+<<<<<<< HEAD
+=======
+void print(minternal_t&);
+>>>>>>> 9062e9a1ba7de38e68357159fd95bfb0b1fb7445
 // 4. int db_delete (int64_t table_id, int64_t key);
 // • Find the matching record and delete it if found.
 // • If success, return 0. Otherwise, return non-zero value.
 int db_delete (table_t table_id, key__t key) {
+    // page_t tp;
+    // file_read_page(table_id, 164, &tp);
+    // minternal_t internal = tp;
+    // printf("164\n");
+    // print(internal);
     char tmpv[123];
     u16_t tmps;
     pagenum_t leaf_pn = find_leaf_page(table_id, key);
@@ -817,6 +826,11 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         /* Append k_prime.
          */
         minternal_t internal = page, neighbor_internal = neighbor_page;
+        // printf("internal\n");
+        // print(internal);
+        // printf("neighbor\n");
+        // print(neighbor_internal);
+        // puts("");
         neighbor_internal.keys.push_back(k_prime);
         neighbor_internal.children.push_back(internal.first_child);
         neighbor_internal.keys.insert(neighbor_internal.keys.end(), internal.keys.begin(), internal.keys.end());
@@ -824,6 +838,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         int update_index = neighbor_internal.num_keys;
         neighbor_internal.num_keys += internal.num_keys + 1;
         neighbor_page = neighbor_internal;
+        // print(neighbor_internal);
         file_write_page(fd, neighbor_pn, &neighbor_page);
 
         /* All children must now point up to the same parent.
@@ -867,7 +882,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
  * maximum
  */
 int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*pn's index*/, int k_prime_index, int k_prime) {
-    if (VERBOSE)printf("%s\n", __func__);
+    if (VERBOSE) printf("%s\n", __func__);
     page_t page, neighbor_page;
     file_read_page(fd, pn, &page);
     file_read_page(fd, neighbor_pn, &neighbor_page);
@@ -1008,7 +1023,7 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
     /* Case:  deletion from the root. 
      */
     if(VERBOSE) printf("after removing entry\n");
-    if(VERBOSE)printf("root %d\n", get_root_page(fd));
+    if(VERBOSE) printf("root %d\n", get_root_page(fd));
     if (pn == get_root_page(fd)) {
         return adjust_root(fd, pn);
     }
@@ -1026,9 +1041,9 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
     mnode_t node = page;
 
     if (node.is_leaf) {
-        if(VERBOSE) printf("case leaf\n");
+        if (VERBOSE) printf("case leaf\n");
         mleaf_t leaf = page;
-        if(VERBOSE)print(leaf);
+        if (VERBOSE )print(leaf);
     
         /* Case:  node stays at or above minimum.
         * (The simple case.)
@@ -1038,14 +1053,14 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
         }
     }
     else {
-        if(VERBOSE) printf("case inter\n");
+        if (VERBOSE) printf("case inter\n");
         minternal_t internal = page;
 
         /* Case:  node stays at or above minimum.
         * (The simple case.)
         */
         if (internal.num_keys >= 124) {
-            if (VERBOSE)printf("simple case\n");
+            if (VERBOSE) printf("simple case\n");
             return 0;
         }
     }
@@ -1062,7 +1077,7 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
     * to the neighbor.
     */
     int index = get_index(fd, pn), neighbor_index, k_prime_index;
-    if (VERBOSE)printf("index %d\n", index);
+    if (VERBOSE) printf("index %d\n", index);
     if (index == -1) { // leftmost -> right neighbor
         neighbor_index = 0;
         k_prime_index = 0;
