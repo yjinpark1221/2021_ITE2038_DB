@@ -12,7 +12,7 @@
 // • If success, return the unique table id, which represents the own table in this database. Otherwise,
 // return negative value.
 table_t open_table(char* pathname) {
-    return file_open_database_file(pathname);
+    return file_open_table_file(pathname);
 }
 
 //  2. int db_insert (int64_t table_id, int64_t key, char * value, uint16_t val_size);
@@ -128,7 +128,7 @@ int init_db() {
 // • Clean up everything.
 // • If success, return 0. Otherwise, return non-zero value.
 int shutdown_db() {
-    file_close_database_file();
+    file_close_table_file();
     return 0;
 }
 

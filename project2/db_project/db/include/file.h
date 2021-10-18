@@ -11,7 +11,7 @@ table_t next_table_id();
 // • Then it returns the table id of the opened table file.
 // • All other 5 commands below should be handled after open table file.
 // Open existing database file or create one if it doesn't exist
-table_t file_open_database_file(const char* pathname);
+table_t file_open_table_file(const char* pathname);
 
 // 2. uint64_t file_alloc_page (int64_t table_id);
 // • Allocate a page.
@@ -43,7 +43,7 @@ void file_write_page(table_t table_id, pagenum_t pagenum, const page_t* src);
 // 6. void file_close_table_files();
 // • Close all table files.
 // Close the database file
-void file_close_database_file();
+void file_close_table_file();
 
 /// below are the APIs for testing ///
 

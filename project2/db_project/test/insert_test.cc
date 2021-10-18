@@ -10,7 +10,7 @@ TEST(InsertTest, ascEven50_10000) {
 
     puts("START");
     int n = 10000;
-    table_t fd = file_open_database_file("ascEven50_10000");
+    table_t fd = file_open_table_file("ascEven50_10000");
     ASSERT_TRUE(fd > 0);
     for (key__t key = -n; key <= n; key += 2) {
         char val[] = "01234567890123456789012345678901234567890123456789";
@@ -50,7 +50,7 @@ TEST(InsertTest, descEvenLen112_10000) {
 
     puts("START");
     int n = 10000;
-    table_t fd = file_open_database_file("descEvenLen112_10000");
+    table_t fd = file_open_table_file("descEvenLen112_10000");
     ASSERT_TRUE(fd > 0);
     for (key__t key = n; key >= -n; key -= 2) {
         char val[] = "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
@@ -91,7 +91,7 @@ TEST(InsertTest, randomVariableSize10000) {
 
     puts("START");
     key__t n = 10000;
-    table_t fd = file_open_database_file("insertFindTest10000");
+    table_t fd = file_open_table_file("insertFindTest10000");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;
     for (key__t i = 0; i <= n; ++i) {

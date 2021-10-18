@@ -19,7 +19,7 @@ TEST(FileTest, HandlesInitialization) {
   const char* pathname = "init_test";  // customize it to your test file
 
   // Open a database file
-  fd = file_open_database_file(pathname);
+  fd = file_open_table_file(pathname);
   // Check if the file is opened
   ASSERT_TRUE(fd > 0);  // change the condition to your design's behavior
 
@@ -30,7 +30,7 @@ TEST(FileTest, HandlesInitialization) {
       << num_pages;
 
   // Close all database files
-  file_close_database_file();
+  file_close_table_file();
 
   // Remove the db file
 
@@ -44,7 +44,7 @@ TEST(FileTest, HandlesInitialization) {
  */
 TEST(FileTest, HandlesPageAllocation) {
   pagenum_t allocated_page, freed_page;
-  int fd = file_open_database_file("allocFreeTest");
+  int fd = file_open_table_file("allocFreeTest");
   // Allocate the pages
   allocated_page = file_alloc_page(fd);
   freed_page = file_alloc_page(fd);
@@ -60,7 +60,7 @@ TEST(FileTest, HandlesPageAllocation) {
 }
 
 TEST(FileTest, CheckReadWriteOperation) {
-  int fd = file_open_database_file("readWriteTest");
+  int fd = file_open_table_file("readWriteTest");
 
   // Write
   char* src = (char*)malloc(PAGE_SIZE);
@@ -78,6 +78,6 @@ TEST(FileTest, CheckReadWriteOperation) {
   }
   free(src);
   free(dest);
-  file_close_database_file();
+  file_close_table_file();
   remove("readWriteTest");
 }

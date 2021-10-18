@@ -13,7 +13,7 @@ TEST(DeleteTest, freePageTest) {
 
     puts("START");
     int n = 100000;
-    table_t fd = file_open_database_file("deleteFreeTest.db");
+    table_t fd = file_open_table_file("deleteFreeTest.db");
     ASSERT_TRUE(fd > 0);
 
     for (key__t key = -n; key <= n; ++key) {
@@ -76,7 +76,7 @@ TEST(DeleteTest, randomNullTest) {
     puts("START");
     bool inTree[100001];
     key__t n = 100000;
-    table_t fd = file_open_database_file("randomDelete.db");
+    table_t fd = file_open_table_file("randomDelete.db");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;
     for (key__t i = 0; i <= n; ++i) {
@@ -144,7 +144,7 @@ TEST(DeleteTest, randomAllTest) {
     puts("START");
     bool inTree[100001];
     key__t n = 100000;
-    table_t fd = file_open_database_file("randomAll.db");
+    table_t fd = file_open_table_file("randomAll.db");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;
     for (key__t i = 0; i <= n; ++i) {

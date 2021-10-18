@@ -18,7 +18,7 @@ table_t next_table_id() {
 // • If a new file needs to be created, the default file size should be 10 MiB.
 // • Then it returns the file descriptor of the opened database file.
 // • All other 5 commands below should be handled after open data file.
-table_t file_open_database_file(const char* pathname) {
+table_t file_open_table_file(const char* pathname) {
     int fd = open(pathname, O_RDWR);
 
     if (fd < 0) {
@@ -157,7 +157,7 @@ void file_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
 // void file_close_database_file();
 // • Close the database file.
 // • This API doesn’t receive a file descriptor as a parameter. So a means for referencing the descriptor of the opened file(i.e., global variable) is required.
-void file_close_database_file(){
+void file_close_table_file(){
     for (int fd : openedFds) {
         if (fd > 0 && close(fd) < 0) {
             perror("file_close_database_file close error");

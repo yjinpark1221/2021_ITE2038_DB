@@ -16,7 +16,7 @@ int main(){
     puts("START");
     bool inTree[1000001];
     key__t n = 10000;
-    table_t fd = file_open_database_file("tmp.db");
+    table_t fd = file_open_table_file("tmp.db");
     assert(fd > 0);
     std::vector<key__t> randomVec;
     for (key__t i = 0; i <= n; ++i) {
