@@ -49,7 +49,11 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
      */
 
     pagenum_t leaf_pn = find_leaf_page(table_id, key);
-    buf_read_page(table_id, leaf_pn, &page);
+
+    buf_read_page(table_id, leaf_pn, &page, 0);
+    // only read 
+    // no pin
+
     leaf = page;
 
     if (leaf.free_space >= val_size + 12) {
@@ -76,7 +80,11 @@ int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size) {
         *val_size = 0;
         return 1;
     }
-    buf_read_page(fd, pn, &page);
+
+    buf_read_page(fd, pn, &page, 0);
+    // only read 
+    // no pin
+
     leaf = page;
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
@@ -137,9 +145,17 @@ int shutdown_db() {
 void print_leaves(table_t fd) {
     int i;
     page_t page;
-    buf_read_page(fd, 0, &page);
+
+    buf_read_page(fd, 0, &page, 0);
+    // header page
+    // no pin
+
     pagenum_t  root_pn = ((pagenum_t*)page.a)[2];
-    buf_read_page(fd, root_pn, &page);
+    
+    buf_read_page(fd, root_pn, &page, 0);
+    // read only
+    // no pin
+
     if (root_pn == 0) {
         printf("Empty tree.\n");
         return;
@@ -147,7 +163,10 @@ void print_leaves(table_t fd) {
     mnode_t root = page;
     pagenum_t leafpn = find_leaf_page(fd, -1000000);
     for (; ;) {
-        buf_read_page(fd, leafpn, &page);
+        buf_read_page(fd, leafpn, &page, 0);
+        // only read 
+        // no pin
+
         mleaf_t leaf = page;
         for (mslot_t k : leaf.slots) {
             printf("%d ", k.key);
@@ -172,7 +191,10 @@ int height(table_t fd, mnode_t* root) {
     page_t cp;
     while (!c.is_leaf) {
         pagenum_t first_child = c.children[0];
-        buf_read_page(fd, first_child, &cp);
+        buf_read_page(fd, first_child, &cp, 0);
+        // only read 
+        // no pin
+
         c = cp;
         h++;
     }
@@ -188,7 +210,10 @@ int path_to_root(table_t fd, mnode_t& child) {
     mnode_t c = child;
     page_t cp;
     while(c.parent != 0) {
-        buf_read_page(fd, c.parent, &cp);
+        buf_read_page(fd, c.parent, &cp, 0);
+        // read only
+        // no pin
+
         c = cp; 
         length++;
     }
@@ -197,7 +222,11 @@ int path_to_root(table_t fd, mnode_t& child) {
 
 pagenum_t get_root_page(table_t fd) {
     page_t page;
-    buf_read_page(fd, 0, &page);
+    
+    buf_read_page(fd, 0, &page, 0);
+    // header page
+    // no pin
+
     return ((pagenum_t*)(page.a))[16 / 8];
 }
 
@@ -227,12 +256,20 @@ void print_tree(table_t fd) {
     while (!queue.empty()) {
         pn = queue.front();
         queue.pop();
-        buf_read_page(fd, pn, &page);
+
+        buf_read_page(fd, pn, &page, 0);
+        // read only
+        // no pin
+
         node = page;
         pagenum_t parent_pn = node.parent;
         page_t parent_page;
         minternal_t parent;
-        buf_read_page(fd, parent_pn, &parent_page);
+
+        buf_read_page(fd, parent_pn, &parent_page, 0);
+        // read only
+        // no pin
+
         parent = parent_page;
 
         if (pn == parent.first_child) {
@@ -277,7 +314,11 @@ pagenum_t find_leaf_page(table_t fd, key__t key) {
     minternal_t internal;
     mleaf_t leaf;
     page_t page;
-    buf_read_page(fd, pn, &page);
+
+    buf_read_page(fd, pn, &page, 0);
+    // read only
+    // no pin
+
     c = page;
     while (!c.is_leaf) {
         internal = page;
@@ -285,7 +326,11 @@ pagenum_t find_leaf_page(table_t fd, key__t key) {
         int i = iter - internal.keys.begin();
         if (i == 0) pn = internal.first_child;
         else pn = internal.children[i - 1];
-        buf_read_page(fd, pn, &page);
+
+        buf_read_page(fd, pn, &page, 0);
+        // read only
+        // no pin
+
         c = page;
     }
     return pn;
@@ -366,7 +411,10 @@ int get_left_index(minternal_t internal /* parent */, pagenum_t left) {
  */
 pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string value) {
     page_t leaf_page;
-    buf_read_page(fd, pn, &leaf_page);
+
+    control_t* ctrl_leaf = buf_read_page(fd, pn, &leaf_page);
+    // needs to be unpinned
+
     mleaf_t leaf = leaf_page;
 
     int i, insertion_point;
@@ -381,6 +429,10 @@ pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string val
     adjust(leaf);
     leaf_page = leaf;
     buf_write_page(fd, pn, &leaf_page);
+
+    ctrl_leaf->pin_count--;
+    // unpinned
+
     return 0;
 }
 
@@ -402,10 +454,17 @@ int adjust(mleaf_t& leaf) {
  * in half.
  */
 pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key, std::string value) {
-    pagenum_t new_pn = buf_alloc_page(fd);
+    control_t* ctrl_new = buf_alloc_page(fd);
+    // needs to be unpinned
+
+    pagenum_t new_pn = ctrl_new->tp.second;
+
     mleaf_t leaf, new_leaf;
-    page_t page;
-    buf_read_page(fd, pn, &page);
+    page_t page, new_page;
+
+    control_t* ctrl_pn = buf_read_page(fd, pn, &page);
+    // needs to be unpinned
+
     leaf = page;
 
     new_leaf.right_sibling = leaf.right_sibling;
@@ -436,25 +495,37 @@ pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key,
     adjust(leaf);
     adjust(new_leaf);
 
-    page = new_leaf;
-    buf_write_page(fd, new_pn, &page);
-
     page = leaf;
     buf_write_page(fd, pn, &page);
+    ctrl_pn->pin_count--;
+    // unpinned
+
+    new_page = new_leaf;
+    buf_write_page(fd, new_pn, &new_page);
+    ctrl_new->pin_count--;
+    // unpinned
     
     /* Case : insert into original leaf
     */
     if (key < cmp_key) {
         insert_into_leaf(fd, pn, key, value);
-        buf_read_page(fd, pn, &page);
+
+        buf_read_page(fd, pn, &page, 0);
+        // read only for insert_into_parent argument
+        // no pin
+
         leaf = page;
     }
     /* Case : insert into new leaf
      */
     else {
         insert_into_leaf(fd, new_pn, key, value);
-        buf_read_page(fd, new_pn, &page);
-        new_leaf = page;
+
+        buf_read_page(fd, new_pn, &new_page, 0);
+        // read only for insert_into_parent argument
+        // no pin
+
+        new_leaf = new_page;
     }
     return insert_into_parent(fd, pn, new_pn, new_leaf.slots[0].key, leaf.parent);
 }
@@ -466,7 +537,10 @@ pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key,
 pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index) {
     page_t page;
-    buf_read_page(fd, parent_pn, &page);
+
+    control_t* ctrl = buf_read_page(fd, parent_pn, &page);
+    // needs to be unpinned
+
     minternal_t parent = page;
 
     parent.keys.push_back(-1);
@@ -480,7 +554,11 @@ pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn,
     ++parent.num_keys;
 
     page = parent;
+    
     buf_write_page(fd, parent_pn, &page);
+    ctrl->pin_count--;
+    // unpinned
+
     return 0;
 }
 
@@ -491,7 +569,10 @@ pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn,
 pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index) {
     page_t page;
-    buf_read_page(fd, parent_pn, &page);
+
+    control_t* ctrl_parent = buf_read_page(fd, parent_pn, &page);
+    // needs to be unpinned
+    
     minternal_t internal = page;
     
     /* First create a temporary set of keys and pointers
@@ -517,7 +598,10 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
      * half the keys and pointers to the
      * old and half to the new.
      */
-    pagenum_t new_internal_pn = buf_alloc_page(fd);
+    control_t* ctrl_new = buf_alloc_page(fd);
+    pagenum_t new_internal_pn = ctrl_new->tp.second;
+    // needs to be unpinned
+    
     key__t new_key = temp_keys[124];
     minternal_t new_internal, original_internal;
     new_internal.parent = internal.parent;
@@ -534,24 +618,34 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
 
     page = internal;
     buf_write_page(fd, parent_pn, &page);
-
+    ctrl_parent->pin_count--;
+    // unpinned
+    
     page = new_internal;
     buf_write_page(fd, new_internal_pn, &page);
+    ctrl_new->pin_count--;
+    // unpinned
 
     /* Change the parent page number of children of new page
      */
     pagenum_t child_pn = new_internal.first_child;
-    buf_read_page(fd, child_pn, &page);
+    control_t* ctrl_child = buf_read_page(fd, child_pn, &page);
+    // needs to be pinned
     
     ((pagenum_t*)(page.a))[0] = new_internal_pn;
     buf_write_page(fd, child_pn, &page);
+    ctrl_child->pin_count--;
+    // unpinned
 
     for (int i = 0; i < new_internal.num_keys; ++i) {
         child_pn = new_internal.children[i];
-        buf_read_page(fd, child_pn, &page);
+        control_t* ctrl_child = buf_read_page(fd, child_pn, &page);
+        // needs to be pinned
 
         ((pagenum_t*)(page.a))[0] = new_internal_pn;
         buf_write_page(fd, child_pn, &page);
+        ctrl_child->pin_count--;
+        // unpinned
     }
 
     /* Insert a new key into the parent of the two
@@ -572,7 +666,12 @@ pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t 
      * function body.)  
      */
     page_t page;
-    buf_read_page(fd, parent, &page);
+    
+    buf_read_page(fd, parent, &page, 0);
+    // read only
+    // for getting num_keys
+    // no pin
+
     minternal_t internal = page;
 
     /* Find the parent's pointer to the left 
@@ -596,9 +695,16 @@ pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t 
  */
 pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t key) {
     page_t page, new_page;
-    buf_read_page(fd, pn, &page);
-    buf_read_page(fd, new_pn, &new_page);
-    pagenum_t root_pn = buf_alloc_page(fd);
+    control_t* ctrl_pn = buf_read_page(fd, pn, &page);
+    // needs to be unpinned
+
+    control_t* ctrl_new = buf_read_page(fd, new_pn, &new_page);
+    // needs to be unpinned
+    
+    control_t* ctrl_root = buf_alloc_page(fd);
+    pagenum_t root_pn = ctrl_root->tp.second;
+    // needs to be unpinned
+    
     page_t root_page;
     minternal_t root;
     root.num_keys = 1;
@@ -626,14 +732,28 @@ pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__
         page = internal;
         new_page = new_internal;
     }
+
     root_page = root;
     buf_write_page(fd, pn, &page);
+    ctrl_pn->pin_count--;
+    // unpinned
+
     buf_write_page(fd, new_pn, &new_page);
+    ctrl_new->pin_count--;
+    // unpinned
+
     buf_write_page(fd, root_pn, &root_page);
+    ctrl_root->pin_count--;
+    // unpinned
+
     page_t header_page;
-    buf_read_page(fd, 0, &header_page);
+    buf_read_page(fd, 0, &header_page, 0);
+    // header page
+    // no pin
+
     ((pagenum_t*)header_page.a)[2] = root_pn;
-    buf_write_page(fd, 0, &header_page);      // header
+    buf_write_page(fd, 0, &header_page);
+
     return 0;
 }
 
@@ -647,6 +767,8 @@ pagenum_t start_new_tree(table_t fd, key__t key, std::string value) {
     buf_write_page(fd, pn, &page);     // root
 
     buf_read_page(fd, 0, &page);
+    // header page
+    // no pin
     ((pagenum_t*)page.a)[2] = pn;
     buf_write_page(fd, 0, &page);      // header
     return 0;
@@ -673,11 +795,17 @@ int get_index(table_t fd, pagenum_t pn) {
      * return -1.
      */
     page_t page, parent_page;
-    buf_read_page(fd, pn, &page);
+    buf_read_page(fd, pn, &page, 0);
+    // read only
+    // no pin
+
     mnode_t node;
     node = page;
 
     buf_read_page(fd, node.parent, &parent_page);
+    // read only
+    // no pin
+
     minternal_t internal = parent_page;
     if (VERBOSE)print(internal);
     for (int i = 0; i <= internal.num_keys; ++i) {
@@ -696,15 +824,17 @@ int get_index(table_t fd, pagenum_t pn) {
 void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
     if (VERBOSE)printf("%s %d %d\n", __func__, pn, key);
     page_t page;
-    buf_read_page(fd, pn, &page);
+    control_t* ctrl = buf_read_page(fd, pn, &page);
+    // needs to be unpinned
+
     mnode_t node = page;
     if (node.is_leaf) {
         mleaf_t leaf = page;
         mslot_t slot = key;
-    if (VERBOSE)print(leaf);
+        if (VERBOSE) print(leaf);
         auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key); 
         int index = iter - leaf.slots.begin();
-    if (VERBOSE)printf("index %d\n", index);
+        if (VERBOSE) printf("index %d\n", index);
         for (int i = index; i < leaf.num_keys - 1; ++i) {
             leaf.slots[i] = leaf.slots[i + 1];
             leaf.values[i] = leaf.values[i + 1];
@@ -714,13 +844,15 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
         --leaf.num_keys;
         adjust(leaf); // adjust offset and free_space
         page = leaf;
-    if (VERBOSE)print(leaf);
+        if (VERBOSE) print(leaf);
         buf_write_page(fd, pn, &page);
+        ctrl->pin_count--;
+        // unpinned
     }
     else {
         minternal_t internal = page;
-        if (VERBOSE)print(internal);
-        if (VERBOSE)printf("case internal\n");
+        if (VERBOSE) print(internal);
+        if (VERBOSE) printf("case internal\n");
         auto iter = std::lower_bound(internal.keys.begin(), internal.keys.end(), key);
         int index = iter - internal.keys.begin();
         if (VERBOSE) printf("index %d\n", index);
@@ -737,8 +869,10 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
 
         --internal.num_keys;
         page = internal;
-        if (VERBOSE)print(internal);
+        if (VERBOSE) print(internal);
         buf_write_page(fd, pn, &page);
+        ctrl->pin_count--;
+        // unpinned
     }
 }
 
@@ -746,7 +880,9 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
 int adjust_root(table_t fd, pagenum_t pn) {
     if (VERBOSE)printf("%s\n", __func__);
     page_t page;
-    buf_read_page(fd, pn, &page);
+    control_t* ctrl = buf_read_page(fd, pn, &page);
+    // needs to be unpinned
+
     mnode_t node = page;
     
     /* Case: nonempty root.
@@ -755,6 +891,8 @@ int adjust_root(table_t fd, pagenum_t pn) {
      */
     if (node.num_keys > 0) {
         if (VERBOSE) printf("nonempty root");
+        ctrl->pin_count--;
+        // unpinned
         return 0;
     }
 
@@ -762,6 +900,9 @@ int adjust_root(table_t fd, pagenum_t pn) {
      */
 
     buf_free_page(fd, pn);
+    ctrl->pin_count--;
+    // unpinned
+    
     pagenum_t new_root_pn = 0;
 
     // If it has a child, promote 
@@ -772,15 +913,22 @@ int adjust_root(table_t fd, pagenum_t pn) {
         minternal_t internal = page;
         new_root_pn = internal.first_child;
         if (VERBOSE) printf("read new root %d\n", new_root_pn);
-        buf_read_page(fd, new_root_pn, &page);
+        
+        control_t* ctrl_new = buf_read_page(fd, new_root_pn, &page);
+        // needs to be unpinned
         ((pagenum_t*)page.a)[0] = 0;
         buf_write_page(fd, new_root_pn, &page);
+        ctrl_new->pin_count--;
+        // unpinned
     }
 
     // If it is a leaf (has no children),
     // then the whole tree is empty.
     if (VERBOSE) printf("case leaf\n");
+
     buf_read_page(fd, 0, &page);
+    // header page
+    // no pin
     ((pagenum_t*)page.a)[2] = new_root_pn;
     buf_write_page(fd, 0, &page);
 
@@ -806,8 +954,8 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
     }
 
     page_t page, neighbor_page;
-    buf_read_page(fd, pn, &page);
-    buf_read_page(fd, neighbor_pn, &neighbor_page);
+    control_t* ctrl_pn = buf_read_page(fd, pn, &page);
+    control_t* ctrl_neighbor = buf_read_page(fd, neighbor_pn, &neighbor_page);
     mnode_t node = page, neighbor = neighbor_page;
     /* Starting point in the neighbor for copying
      * keys and pointers from n.
@@ -816,7 +964,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
      */
     int insertion_point = neighbor.num_keys;
 
-    /* Case:  nonleaf node.
+    /* Case: nonleaf node.
      * Append k_prime and the following pointer.
      * Append all pointers and keys from the neighbor.
      */
@@ -824,11 +972,6 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         /* Append k_prime.
          */
         minternal_t internal = page, neighbor_internal = neighbor_page;
-        // printf("internal\n");
-        // print(internal);
-        // printf("neighbor\n");
-        // print(neighbor_internal);
-        // puts("");
         neighbor_internal.keys.push_back(k_prime);
         neighbor_internal.children.push_back(internal.first_child);
         neighbor_internal.keys.insert(neighbor_internal.keys.end(), internal.keys.begin(), internal.keys.end());
@@ -836,17 +979,22 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         int update_index = neighbor_internal.num_keys;
         neighbor_internal.num_keys += internal.num_keys + 1;
         neighbor_page = neighbor_internal;
-        // print(neighbor_internal);
+
         buf_write_page(fd, neighbor_pn, &neighbor_page);
+        ctrl_neighbor->pin_count--;
+        // unpinned
 
         /* All children must now point up to the same parent.
          */
         for (int i = update_index; i < neighbor_internal.num_keys; ++i) {
             pagenum_t child_pn = neighbor_internal.children[i];
             page_t child_page;
-            buf_read_page(fd, child_pn, &child_page);
+            control_t* ctrl_child = buf_read_page(fd, child_pn, &child_page);
+            // needs to be unpinned
             ((pagenum_t*)child_page.a)[0] = neighbor_pn;
             buf_write_page(fd, child_pn, &child_page);
+            ctrl_child->pin_count--;
+            // unpinned
         }
     }
 
@@ -856,7 +1004,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
      * what had been n's right neighbor.
      */
     else {
-    if (VERBOSE)printf("case leaf\n");
+        if (VERBOSE)printf("case leaf\n");
         mleaf_t leaf = page, neighbor_leaf = neighbor_page;
         neighbor_leaf.right_sibling = leaf.right_sibling;
         for (int i = 0; i < leaf.num_keys; ++i) {
@@ -866,9 +1014,15 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         neighbor_leaf.num_keys += leaf.num_keys;
         adjust(neighbor_leaf); // adjust offset and free_space
         neighbor_page = neighbor_leaf;
+
         buf_write_page(fd, neighbor_pn, &neighbor_page);
+        ctrl_neighbor->pin_count--;
+        // unpinned
     }
     buf_free_page(fd, pn);
+    ctrl_pn->pin_count--;
+    // unpinned
+    
     return delete_entry(fd, neighbor.parent, k_prime);
 }
 
@@ -879,11 +1033,14 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
  * small node's entries without exceeding the
  * maximum
  */
+// all of them needs to be pinned and unpinned
 int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*pn's index*/, int k_prime_index, int k_prime) {
     if (VERBOSE) printf("%s\n", __func__);
     page_t page, neighbor_page;
-    buf_read_page(fd, pn, &page);
-    buf_read_page(fd, neighbor_pn, &neighbor_page);
+    control_t* ctrl_pn = buf_read_page(fd, pn, &page);
+    // needs to be unpinned
+    control_t* ctrl_neighbor = buf_read_page(fd, neighbor_pn, &neighbor_page);
+    // needs to be unpinned
     mnode_t node = page;
 
     /* Case: n is the leftmost child.
@@ -904,11 +1061,16 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             adjust(neighbor_leaf);
             
             page_t parent_page;
-            buf_read_page(fd, leaf.parent, &parent_page);
+            control_t* ctrl_parent = buf_read_page(fd, leaf.parent, &parent_page);
+            // needs to be unpinned
+
             minternal_t parent = parent_page;
             parent.keys[k_prime_index] = neighbor_leaf.slots[0].key;
             parent_page = parent;
+            
             buf_write_page(fd, leaf.parent, &parent_page);
+            ctrl_parent->pin_count--;
+            // unpinned
 
             page = leaf;
             neighbor_page = neighbor_leaf;
@@ -919,11 +1081,17 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             internal.children.push_back(neighbor_internal.first_child);
 
             page_t parent_page;
+
             buf_read_page(fd, internal.parent, &parent_page);
+            // needs to be unpinned
+
             minternal_t parent = parent_page;
             parent.keys[k_prime_index] = neighbor_internal.keys[0];
             parent_page = parent;
+
             buf_write_page(fd, internal.parent, &parent_page);
+            ctrl_parent->pin_count--;
+            // unpinned
 
             neighbor_internal.first_child = neighbor_internal.children[0];
             neighbor_internal.keys.erase(neighbor_internal.keys.begin(), neighbor_internal.keys.begin() + 1);
@@ -932,10 +1100,14 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             ++internal.num_keys;
 
             pagenum_t child = internal.children[internal.num_keys - 1];
+
             page_t child_page;
-            buf_read_page(fd, child, &child_page);
+            control_t* ctrl_child = buf_read_page(fd, child, &child_page);
+            // needs to be unpinned
             ((pagenum_t*)child_page.a)[0] = pn;
             buf_write_page(fd, child, &child_page);
+            ctrl_child->pin_count--;
+            // unpinned
             
             page = internal;
             neighbor_page = neighbor_internal;
@@ -949,8 +1121,8 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
     else {
         if (node.is_leaf) {
             mleaf_t leaf = page, neighbor_leaf = neighbor_page;
-            if (VERBOSE)print(leaf);
-            if (VERBOSE)print(neighbor_leaf);
+            if (VERBOSE) print(leaf);
+            if (VERBOSE) print(neighbor_leaf);
             leaf.slots.insert(leaf.slots.begin(), neighbor_leaf.slots[neighbor_leaf.num_keys - 1]);
             leaf.values.insert(leaf.values.begin(), neighbor_leaf.values[neighbor_leaf.num_keys - 1]);
             neighbor_leaf.slots.pop_back();
@@ -961,16 +1133,19 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             adjust(neighbor_leaf);
             
             page_t parent_page;
-            buf_read_page(fd, leaf.parent, &parent_page);
+            control_t* ctrl_leaf = buf_read_page(fd, leaf.parent, &parent_page);
+            // needs to be unpinned
             minternal_t parent = parent_page;
-            if (VERBOSE)printf("parent\n");
-            if (VERBOSE)print(parent);
+            if (VERBOSE) printf("parent\n");
+            if (VERBOSE) print(parent);
             parent.keys[k_prime_index] = leaf.slots[0].key;
             parent_page = parent;
             buf_write_page(fd, leaf.parent, &parent_page);
+            ctrl_leaf->pin_count--;
+            // unpinned
 
-            if (VERBOSE)print(leaf);
-            if (VERBOSE)print(neighbor_leaf);
+            if (VERBOSE) print(leaf);
+            if (VERBOSE) print(neighbor_leaf);
             page = leaf;
             neighbor_page = neighbor_leaf;
         }
@@ -981,11 +1156,14 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             internal.first_child = neighbor_internal.children[neighbor_internal.num_keys - 1];
 
             page_t parent_page;
-            buf_read_page(fd, internal.parent, &parent_page);
+            control_t* ctrl_parent = buf_read_page(fd, internal.parent, &parent_page);
+            // needs to be unpinned
             minternal_t parent = parent_page;
             parent.keys[k_prime_index] = neighbor_internal.keys[neighbor_internal.num_keys - 1];
             parent_page = parent;
             buf_write_page(fd, internal.parent, &parent_page);
+            ctrl_parent->pin_count--;
+            // unpinned
 
             neighbor_internal.keys.pop_back();
             neighbor_internal.children.pop_back();
@@ -994,16 +1172,24 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
 
             pagenum_t child = internal.first_child;
             page_t child_page;
-            buf_read_page(fd, child, &child_page);
+            control_t* ctrl_child = buf_read_page(fd, child, &child_page);
+            // needs to be unpinned
             ((pagenum_t*)child_page.a)[0] = pn;
             buf_write_page(fd, child, &child_page);
+            ctrl_child->pin_count--;
+            // unpinned
 
             page = internal;
             neighbor_page = neighbor_internal;
         }
     }
     buf_write_page(fd, pn, &page);
+    ctrl_pn->pin_count--;
+    // unpinned
     buf_write_page(fd, neighbor_pn, &neighbor_page);
+    ctrl_neighbor->pin_count--;
+    // unpinned
+    
     return 0;
 }
 
@@ -1035,7 +1221,9 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
      */
      
     page_t page;
-    buf_read_page(fd, pn, &page);
+    buf_read_page(fd, pn, &page, 0);
+    // read only
+    // no pin
     mnode_t node = page;
 
     if (node.is_leaf) {
@@ -1054,7 +1242,7 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
         if (VERBOSE) printf("case inter\n");
         minternal_t internal = page;
 
-        /* Case:  node stays at or above minimum.
+        /* Case: node stays at or above minimum.
         * (The simple case.)
         */
         if (internal.num_keys >= 124) {
@@ -1086,7 +1274,10 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
     }
 
     page_t parent_page;
-    buf_read_page(fd, node.parent, &parent_page);
+    buf_read_page(fd, node.parent, &parent_page, 0);
+    // read only
+    // no pin
+
     minternal_t parent = parent_page;
     pagenum_t neighbor_pn;
     key__t k_prime = parent.keys[k_prime_index];
@@ -1099,7 +1290,10 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
     }
 
     page_t neighbor_page;
-    buf_read_page(fd, neighbor_pn, &neighbor_page);
+    buf_read_page(fd, neighbor_pn, &neighbor_page, 0);
+    // read only
+    // no pin
+
     mnode_t neighbor = neighbor_page;
 
     // leaf
