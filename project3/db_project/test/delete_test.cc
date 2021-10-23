@@ -13,7 +13,8 @@ TEST(DeleteTest, freePageTest) {
 
     puts("START");
     int n = 100000;
-    table_t fd = file_open_table_file("deleteFreeTest.db");
+    init_db(20000);
+    table_t fd = open_table("deleteFreeTest.db");
     ASSERT_TRUE(fd > 0);
 
     for (key__t key = -n; key <= n; ++key) {
@@ -24,7 +25,7 @@ TEST(DeleteTest, freePageTest) {
     puts(""); puts(""); puts("");
 
     printf("print tree\n");
-    print_tree(fd);
+    // print_tree(fd);
 
     for (key__t key = -n; key <= n; ++key) {
         char ret_val[8000] = { 0, };
@@ -44,7 +45,7 @@ TEST(DeleteTest, freePageTest) {
     puts(""); puts(""); puts(""); 
 
     printf("print tree\n");
-    print_tree(fd);
+    // print_tree(fd);
 
     for (key__t i = -n; i <= n; ++i) {
         char ret_val[8000] = { 0, };
@@ -58,10 +59,10 @@ TEST(DeleteTest, freePageTest) {
 
     std::vector<pagenum_t> v = file_get_free_list(fd);
     for (pagenum_t i = 1; i < 2560; ++i) {
-        printf("test invec %d\n", i);
         ASSERT_TRUE(inVec(v, i));
     }
-
+    shutdown_db();
+    puts("shutted down");
     remove("deleteFreeTest.db");
 }
 
@@ -76,7 +77,8 @@ TEST(DeleteTest, randomNullTest) {
     puts("START");
     bool inTree[100001];
     key__t n = 100000;
-    table_t fd = file_open_table_file("randomDelete.db");
+    init_db(20000);
+    table_t fd = open_table("randomDelete.db");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;
     for (key__t i = 0; i <= n; ++i) {
@@ -134,7 +136,8 @@ TEST(DeleteTest, randomNullTest) {
         }
     }
     puts(""); puts(""); puts("");
-
+    shutdown_db();
+    puts("shutted down");
     remove("randomDelete.db");
 }
 
@@ -144,7 +147,8 @@ TEST(DeleteTest, randomAllTest) {
     puts("START");
     bool inTree[100001];
     key__t n = 100000;
-    table_t fd = file_open_table_file("randomAll.db");
+    init_db(20000);
+    table_t fd = open_table("randomAll.db");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;
     for (key__t i = 0; i <= n; ++i) {
@@ -226,6 +230,7 @@ TEST(DeleteTest, randomAllTest) {
         }
     }
     puts(""); puts(""); puts("");
-
+    shutdown_db();
+    puts("shutted down");
     remove("randomAll.db");
 }

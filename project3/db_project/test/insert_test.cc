@@ -9,8 +9,9 @@ TEST(InsertTest, ascEven50_10000) {
 #include <vector>
 
     puts("START");
-    int n = 10000;
-    table_t fd = file_open_table_file("ascEven50_10000");
+    int n = 100000;
+    init_db(20000);
+    table_t fd = open_table("ascEven50_10000");
     ASSERT_TRUE(fd > 0);
     for (key__t key = -n; key <= n; key += 2) {
         char val[] = "01234567890123456789012345678901234567890123456789";
@@ -39,6 +40,8 @@ TEST(InsertTest, ascEven50_10000) {
     ASSERT_EQ((int)v.size(), 0);
     printf("[NOT FOUND] -> [%lu]\n", v.size());
     for (auto& it : v) printf("%d ", it); puts("");
+    shutdown_db();
+    printf("shutted down");
     remove("ascEven50_10000");
 }
 
@@ -49,8 +52,9 @@ TEST(InsertTest, descEvenLen112_10000) {
 #include <vector>
 
     puts("START");
-    int n = 10000;
-    table_t fd = file_open_table_file("descEvenLen112_10000");
+    int n = 100000;
+    init_db(20000);
+    table_t fd = open_table("descEvenLen112_10000");
     ASSERT_TRUE(fd > 0);
     for (key__t key = n; key >= -n; key -= 2) {
         char val[] = "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
@@ -79,6 +83,8 @@ TEST(InsertTest, descEvenLen112_10000) {
     ASSERT_EQ((int)v.size(), 0);
     printf("[NOT FOUND] -> [%lu]\n", v.size());
     for (auto& it : v) printf("%d ", it); puts("");
+    shutdown_db();
+    printf("shutted down");
     remove("descEvenLen112_10000");
 }
 
@@ -90,8 +96,9 @@ TEST(InsertTest, randomVariableSize10000) {
 #include <vector>
 
     puts("START");
-    key__t n = 10000;
-    table_t fd = file_open_table_file("insertFindTest10000");
+    key__t n = 100000;
+    init_db(20000);
+    table_t fd = open_table("insertFindTest10000");
     ASSERT_TRUE(fd > 0);
     std::vector<key__t> randomVec;
     for (key__t i = 0; i <= n; ++i) {
@@ -122,5 +129,7 @@ TEST(InsertTest, randomVariableSize10000) {
     ASSERT_EQ((int)v.size(), 10);
     printf("[NOT FOUND] -> [%lu]\n", v.size());
     for (auto& it : v) printf("%d ", it); puts("");
+    shutdown_db();
+    printf("shutted down");
     remove("insertFindTest10000");
 }

@@ -1,4 +1,8 @@
-#include "../include/buffer.h"
+#ifndef MAINTEST
+#include "buffer.h"
+#endif
+
+#include <cassert>
 
 std::map<table_page_t, control_t*> tp2control;
 control_t* control;
@@ -8,7 +12,7 @@ page_t* hcache;
 int num_buf;
 int cur_buf;
 
-control_t head, tail;
+static control_t head, tail;
 
 int buf_init(int nb) {
     head.next = &tail;
@@ -19,15 +23,9 @@ int buf_init(int nb) {
     num_buf = nb;
     cache = (page_t*) malloc(sizeof(page_t) * num_buf);
     control = (control_t*) malloc(sizeof(control_t) * num_buf);
-    for (int i = 0; i < num_buf; ++i) {
-        control[i].tp = {0, 0};
-    }
     hcontrol = (control_t*) malloc(sizeof(control_t) * 20);
-    for (int i = 0; i < 20; ++i) {
-        hcontrol[i].tp = {0, 0};
-    }
     hcache = (page_t*) malloc(sizeof(page_t) * 20);
-    if (cache == NULL || control == NULL) {
+    if (cache == NULL || control == NULL || hcontrol == NULL || hcache == NULL) {
         perror("in buf_init malloc error");
         exit(0);
     }
@@ -51,7 +49,7 @@ void buf_close_table_file() {
     }
 
     // flush frames
-    for (int i = 0; i < num_buf; ++i) {
+    for (int i = 0; i < cur_buf; ++i) {
         flush(control + i);
     }
     free(cache);
@@ -77,17 +75,13 @@ void buf_free_page(table_t table_id, pagenum_t pagenum) {
     read_header(table_id);
 }
 
-control_t* buf_read_page(table_t table_id, pagenum_t pagenum, page_t* dest, bool pin = 1) {
+control_t* buf_read_page(table_t table_id, pagenum_t pagenum, page_t* dest, bool pin) {
     // reading header page -> must be in hcontrol block
     if (pagenum == 0) {
         for (int i = 0; i < openedFds.size(); ++i) {
             control_t* hc = hcontrol + i;
             if (hc->tp.first == table_id) {
                 memcpy(dest, hc->frame, PAGE_SIZE);
-                hc->pin_count++;
-
-                // TODO : unpin in index layer
-
                 return hc;
             }
         }
@@ -102,13 +96,15 @@ control_t* buf_read_page(table_t table_id, pagenum_t pagenum, page_t* dest, bool
     if (iter == tp2control.end()) {
         // LRU flush
         ct = flush_LRU(table_id, pagenum);
-
+        tp2control[{table_id, pagenum}] = ct;
+        move_to_tail(ct);
         // disk to buf
         file_read_page(table_id, pagenum, ct->frame);
     }
     // in cache
     else {
         ct = iter->second;        
+        move_to_tail(ct);
     }
 
     // buf to index
@@ -116,12 +112,23 @@ control_t* buf_read_page(table_t table_id, pagenum_t pagenum, page_t* dest, bool
     if (pin) ct->pin_count++;
     // TODO : unpin in index layer
 
-    move_to_tail(ct);
+    // move_to_tail(ct);
     
     return ct;
 }
 
 void buf_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
+    if (pagenum == 0) {
+        for (int i = 0; i < openedFds.size(); ++i) {
+            control_t* hc = hcontrol + i;
+            if (hc->tp.first == table_id) {
+                memcpy(hc->frame, src, PAGE_SIZE);
+                hc->is_dirty = 1;
+                return;
+            }
+        }
+    }
+    
     auto iter = tp2control.find({table_id, pagenum});
     control_t* ct;
 
@@ -144,12 +151,17 @@ control_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
     // -> no need to flush 
     // -> control[end] = {table_id, pagenum}
     if (cur_buf < num_buf) {
-        if (cur_buf == 0) {
-        }
+        // printf("cur_buf %d\n", cur_buf);
         control[cur_buf].tp = {table_id, pagenum};
         control[cur_buf].is_dirty = 0;
         control[cur_buf].pin_count = 0;
+        control[cur_buf].frame = cache + cur_buf;
+        control[cur_buf].next = NULL;
+        control[cur_buf].prev = NULL;
         tp2control[{table_id, pagenum}] = control + cur_buf;
+        move_to_tail(control + cur_buf);
+        assert(control[cur_buf].next != NULL);
+        assert(control[cur_buf].prev != NULL);
         ++cur_buf;
         return control + cur_buf - 1;
     }
@@ -158,27 +170,35 @@ control_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
     // TODO : get control block(LRU clock function)
 
     control_t* ct;
-    control_t* first = head.next;
     int count = num_buf;
-    for (ct = head.next; ct->pin_count && num_buf--; ct = head.next);
-
+    for (ct = head.next; ct != &tail && ct->pin_count && num_buf--; ct = ct->next);    
     // case : all pinned(small buffer)
     // WARNING : needs to be reconsidered if multi-thread
-    
-    if (ct->pin_count) {
+    if (ct == &tail || ct->pin_count) {
+        perror("small buffer or not unpinned error");
+        exit(0);
         return NULL;
     }
 
     // case : found unpinned frame
-
+    auto iter = tp2control.find(ct->tp);
+    if (iter == tp2control.end()) {
+        // for (auto p : tp2control) {
+        //     printf("%d %d \n", p.first.first, p.first.second);
+        // }
+        // printf("ct->tp %d %d\n", ct->tp.first, ct->tp.second);
+        perror("in flush_LRU iter not found");
+        exit(0);
+    }
+    tp2control.erase(iter);
     flush(ct);
-    tp2control.remove(ct->tp);
 
     ct->tp = {table_id, pagenum};
     tp2control[{table_id, pagenum}] = ct;
     ct->is_dirty = 0;
     ct->pin_count = 0;
 
+    move_to_tail(ct);
     return ct;
 }
 
@@ -186,6 +206,7 @@ control_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
 // called flushing the head.next
 void flush(control_t* ctrl) {
     if (ctrl->pin_count) {
+        printf("%d %d %d\n", ctrl->pin_count, ctrl - control, ctrl - hcontrol);
         perror("flushing pinned page");
         exit(0);
     }
@@ -221,14 +242,23 @@ void read_header(table_t table_id) {
 // This function moves ct to the tail
 // called when referenced
 void move_to_tail(control_t* ct) {
-    control_t* prev = ct->prev, next = ct->next, last = tail.prev;
-    prev->next = next;
-    next->prev = prev;
+    control_t* prev = ct->prev, *next = ct->next, *last = tail.prev;
+    if (last == ct) return;
+    if (prev)prev->next = next;
+    if (next)next->prev = prev;
 
+    // if (tail.prev == &head) puts("!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    // printf("%p %p %p %p %p %p\n", &head, &tail, prev, next, last, ct);
     last->next = ct;
     ct->prev = last;
 
     ct->next = &tail;
     tail.prev = ct;
+
+    // printf("move to tail done\n");
+    // if (head.next == &tail) puts("??????????????????????????");
+    // for (auto p = head.next; p != &tail;p = p->next) {
+    //     printf("%d %d\n", p->tp.first, p->tp.second);
+    // }
 }
 

@@ -4,6 +4,7 @@
 
 std::map<int, table_t> fd2table;
 std::map<table_t, int> table2fd;
+std::vector<int> openedFds;
 
 table_t next_table_id() {
     static table_t table_id = 1;

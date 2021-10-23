@@ -65,7 +65,7 @@ table_t open_table (char *pathname);
 int db_insert(table_t table_id, key__t key, char * value, u16_t val_size);
 int db_delete (table_t table_id, key__t key);
 int db_find(table_t fd, key__t key, char* ret_val, u16_t* val_size);
-int init_db ();
+int init_db(int);
 int shutdown_db();
 
 void print_leaves(table_t fd, mnode_t* root );
