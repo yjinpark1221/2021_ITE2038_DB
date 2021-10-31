@@ -12,7 +12,7 @@ struct control_t {
     int pin_count;
     control_t* next;
     control_t* prev;
-    control_t(table_t t, pagenum_t p, page_t* f): tp({t, p}), frame(f) {}
+    control_t(table_t t, pagenum_t p, page_t* f): tp({t, p}), frame(f), pin_count(0) {}
     control_t(): is_dirty(0), frame(NULL), pin_count(0), next(NULL), prev(NULL) {}
 };
 

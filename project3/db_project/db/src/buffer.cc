@@ -110,6 +110,7 @@ control_t* buf_read_page(table_t table_id, pagenum_t pagenum, page_t* dest, bool
     // buf to index
     memcpy(dest, ct->frame, PAGE_SIZE);
     if (pin) ct->pin_count++;
+    if (pagenum == 0 && ct->pin_count) printf("why?\n");
     // TODO : unpin in index layer
 
     // move_to_tail(ct);
@@ -206,9 +207,12 @@ control_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
 // called flushing the head.next
 void flush(control_t* ctrl) {
     if (ctrl->pin_count) {
-        printf("%d %d %d\n", ctrl->pin_count, ctrl - control, ctrl - hcontrol);
-        perror("flushing pinned page");
-        exit(0);
+        if (ctrl - hcontrol >= 0 && ctrl - hcontrol < 20) printf("header\n");
+        else {
+            printf("%d %d %d\n", ctrl->pin_count, ctrl - control, ctrl - hcontrol);
+            perror("flushing pinned page");
+            exit(0);
+        }
     }
     if (ctrl->is_dirty) {
         file_write_page(ctrl->tp.first, ctrl->tp.second, ctrl->frame);
