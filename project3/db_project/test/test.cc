@@ -21,9 +21,9 @@ int main(){
         printf("inserting %d\n", i);
         int ret = db_insert(fd, i, val, 50);
 
-        char f[10000];
-        u16_t size;
-        if (db_find(fd, i, f, &size) == 1) printf("?");
+        // char f[10000];
+        // u16_t size;
+        // if (db_find(fd, i, f, &size) == 1) printf("?");
     }
     shutdown_db();
     return 0;
