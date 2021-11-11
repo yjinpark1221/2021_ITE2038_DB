@@ -95,6 +95,7 @@ int lock_release(lock_t* lock_obj) {
         printf("in lock_release pthread_cond_signal nonzero return value");
         return 1;
     }
+    free(lock_obj);
     if (pthread_mutex_unlock(&lock_table_latch)) {
         printf("in lock_release pthread_mutex_unlock nonzero return value");
         return 1;
