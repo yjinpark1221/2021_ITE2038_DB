@@ -53,24 +53,29 @@ transfer_thread_func(void* arg)
 		money_transferred = rand() % MAX_MONEY_TRANSFERRED;
 		money_transferred = rand() % 2 == 0 ?
 			(-1) * money_transferred : money_transferred;
-		
+		printf("source acquire start\n");
 		/* Acquire lock!! */
 		source_lock = lock_acquire(source_table_id, source_record_id);
+		printf("source acquire end\n");
 
 		/* withdraw */
 		accounts[source_table_id][source_record_id] -= money_transferred;
 
+		printf("dest acquire start\n");
 		/* Acquire lock!! */
 		destination_lock =
 			lock_acquire(destination_table_id, destination_record_id);
+		printf("dest acquire end\n");
 
 		/* deposit */
 		accounts[destination_table_id][destination_record_id]
 			+= money_transferred;
 
+		printf("both release start\n");
 		/* Release lock!! */
 		lock_release(destination_lock);
 		lock_release(source_lock);
+		printf("dest release end\n");
 	}
 
 	printf("Transfer thread is done.\n");
@@ -138,9 +143,11 @@ int main()
 			accounts[table_id][record_id] = INITIAL_MONEY;
 		}
 	}
-
+	printf("init start\n");
 	/* Initialize your lock table. */
 	init_lock_table();
+	printf("init end\n");
+	printf("create start\n");
 
 	/* thread create */
 	for (int i = 0; i < TRANSFER_THREAD_NUMBER; i++) {
@@ -149,7 +156,10 @@ int main()
 	for (int i = 0; i < SCAN_THREAD_NUMBER; i++) {
 		pthread_create(&scan_threads[i], 0, scan_thread_func, NULL);
 	}
+	printf("create end\n");
 
+
+	printf("join start\n");
 	/* thread join */
 	for (int i = 0; i < TRANSFER_THREAD_NUMBER; i++) {
 		pthread_join(transfer_threads[i], NULL);
@@ -157,6 +167,7 @@ int main()
 	for (int i = 0; i < SCAN_THREAD_NUMBER; i++) {
 		pthread_join(scan_threads[i], NULL);
 	}
+	printf("join end\n");
 
 	return 0;
 }

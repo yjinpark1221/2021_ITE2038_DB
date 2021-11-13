@@ -47,6 +47,7 @@ lock_t* lock_acquire(table_t table_id, key__t key) {
             printf("in lock_acquire pthread_cond_wait nonzero return value");
             return NULL;
         }
+        free(last);
     }
     // no predecessor's lock object
     else { 
@@ -91,15 +92,18 @@ int lock_release(lock_t* lock_obj) {
     else {
         lock_obj->next->prev = lock_obj->prev;
     }
-
-    if (pthread_cond_signal(&(lock_obj->condition))) {
-        printf("in lock_release pthread_cond_signal nonzero return value");
-        return 1;
+    if (lock_obj->next) {
+        if (pthread_cond_signal(&(lock_obj->condition))) {
+            printf("in lock_release pthread_cond_signal nonzero return value");
+            return 1;
+        }
+    }
+    else {
+        free(lock_obj);
     }
     if (pthread_mutex_unlock(&lock_table_latch)) {
         printf("in lock_release pthread_mutex_unlock nonzero return value");
         return 1;
     }
-    free(lock_obj);
     return 0;
 }
