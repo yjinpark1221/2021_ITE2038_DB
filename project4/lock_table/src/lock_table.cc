@@ -1,9 +1,9 @@
 #include "lock_table.h"
-
+#include <set>
 std::unordered_map<table_t, std::unordered_map<key__t, entry_t> > lock_table;
 pthread_mutex_t lock_table_latch;
 
-
+std::set <lock_t*> allocated;
 // int init_lock_table(void)
 // • Initialize any data structures required for implementing lock table, such as hash table, lock table latch, etc.
 // • If success, return 0. Otherwise, return non-zero value.
@@ -31,6 +31,7 @@ lock_t* lock_acquire(table_t table_id, key__t key) {
 
     entry_t* entry = &(lock_table[table_id][key]);
     lock_t* lock = new lock_t();
+    allocated.insert(lock);
     // sleep until the predecessor releases its lock
     if (entry->head) { 
         lock_t* last = entry->tail;
@@ -47,6 +48,7 @@ lock_t* lock_acquire(table_t table_id, key__t key) {
             printf("in lock_acquire pthread_cond_wait nonzero return value");
             return NULL;
         }
+        allocated.erase(last);
         free(last);
     }
     // no predecessor's lock object
@@ -99,6 +101,7 @@ int lock_release(lock_t* lock_obj) {
         }
     }
     else {
+        allocated.erase(lock_obj);
         free(lock_obj);
     }
     if (pthread_mutex_unlock(&lock_table_latch)) {
@@ -106,4 +109,9 @@ int lock_release(lock_t* lock_obj) {
         return 1;
     }
     return 0;
+}
+
+
+void printList() {
+    printf("size %d\n", allocated.size());
 }
