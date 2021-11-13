@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <utility>
 #include <pthread.h>
-#include <map>
+#include <unordered_map>
 #include <cstdio>
 
 typedef int table_t;
@@ -27,8 +27,6 @@ struct lock_t {
     entry_t* sentinel;
     pthread_cond_t condition;
 };
-
-typedef struct lock_t lock_t;
 
 /* APIs for lock table */
 int init_lock_table();

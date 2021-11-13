@@ -1,6 +1,6 @@
 #include "lock_table.h"
 
-std::map<record_t, entry_t> lock_table;
+std::unordered_map<table_t, std::unordered_map<key__t, entry_t> > lock_table;
 pthread_mutex_t lock_table_latch;
 
 
@@ -22,14 +22,14 @@ lock_t* lock_acquire(table_t table_id, key__t key) {
         return NULL;
     }
 
-    auto tmp = lock_table.find({table_id, key});
+    auto tmp = lock_table.find(table_id);
     // not in lock table -> insert empty list into table
-    if (tmp == lock_table.end()) { 
+    if (tmp == lock_table.end() || (tmp->second).find(key) == (tmp->second).end()) { 
         entry_t entry(table_id, key, NULL, NULL);
-        lock_table[{table_id, key}] = entry;
-    }
+        lock_table[table_id][key] = entry;
+    } 
 
-    entry_t* entry = &(lock_table[{table_id, key}]);
+    entry_t* entry = &(lock_table[table_id][key]);
     lock_t* lock = new lock_t();
     // sleep until the predecessor releases its lock
     if (entry->head) { 
@@ -84,6 +84,7 @@ int lock_release(lock_t* lock_obj) {
     else {
         lock_obj->prev->next = lock_obj->next;
     }
+
     if (entry->tail == lock_obj) {
         entry->tail = lock_obj->prev;
     }
@@ -95,10 +96,10 @@ int lock_release(lock_t* lock_obj) {
         printf("in lock_release pthread_cond_signal nonzero return value");
         return 1;
     }
-    free(lock_obj);
     if (pthread_mutex_unlock(&lock_table_latch)) {
         printf("in lock_release pthread_mutex_unlock nonzero return value");
         return 1;
     }
+    free(lock_obj);
     return 0;
 }
