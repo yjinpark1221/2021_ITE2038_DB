@@ -1,9 +1,11 @@
 #include "lock_table.h"
 #include <set>
-std::unordered_map<table_t, std::unordered_map<key__t, entry_t> > lock_table;
+std::unordered_map<record_t, entry_t, hash_t> lock_table;
 pthread_mutex_t lock_table_latch;
 
-std::set <lock_t*> allocated;
+// // for debugging dynamic allocation
+// std::set <lock_t*> allocated;
+
 // int init_lock_table(void)
 // • Initialize any data structures required for implementing lock table, such as hash table, lock table latch, etc.
 // • If success, return 0. Otherwise, return non-zero value.
@@ -22,16 +24,16 @@ lock_t* lock_acquire(table_t table_id, key__t key) {
         return NULL;
     }
 
-    auto tmp = lock_table.find(table_id);
+    auto tmp = lock_table.find({table_id, key});
     // not in lock table -> insert empty list into table
-    if (tmp == lock_table.end() || (tmp->second).find(key) == (tmp->second).end()) { 
+    if (tmp == lock_table.end()) { 
         entry_t entry(table_id, key, NULL, NULL);
-        lock_table[table_id][key] = entry;
+        lock_table[{table_id, key}] = entry;
     } 
 
-    entry_t* entry = &(lock_table[table_id][key]);
+    entry_t* entry = &(lock_table[{table_id, key}]);
     lock_t* lock = new lock_t();
-    allocated.insert(lock);
+    // allocated.insert(lock);
     // sleep until the predecessor releases its lock
     if (entry->head) { 
         lock_t* last = entry->tail;
@@ -48,8 +50,8 @@ lock_t* lock_acquire(table_t table_id, key__t key) {
             printf("in lock_acquire pthread_cond_wait nonzero return value");
             return NULL;
         }
-        allocated.erase(last);
-        free(last);
+        // allocated.erase(last);
+        delete(last);
     }
     // no predecessor's lock object
     else { 
@@ -101,8 +103,8 @@ int lock_release(lock_t* lock_obj) {
         }
     }
     else {
-        allocated.erase(lock_obj);
-        free(lock_obj);
+        // allocated.erase(lock_obj);
+        delete(lock_obj);
     }
     if (pthread_mutex_unlock(&lock_table_latch)) {
         printf("in lock_release pthread_mutex_unlock nonzero return value");
@@ -112,6 +114,6 @@ int lock_release(lock_t* lock_obj) {
 }
 
 
-void printList() {
-    printf("size %d\n", allocated.size());
-}
+// void printList() {
+//     printf("size %d\n", allocated.size());
+// }

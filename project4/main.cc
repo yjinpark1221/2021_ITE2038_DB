@@ -162,7 +162,7 @@ int main()
 	for (int i = 0; i < SCAN_THREAD_NUMBER; i++) {
 		pthread_join(scan_threads[i], NULL);
 	}
-	printList();
+	// printList();
 	return 0;
 }
 

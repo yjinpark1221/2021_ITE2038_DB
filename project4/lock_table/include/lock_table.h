@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <cstdio>
 
-typedef int table_t;
+typedef int64_t table_t;
 typedef int64_t key__t;
 typedef struct lock_t lock_t;
 typedef struct entry_t entry_t;
@@ -28,9 +28,15 @@ struct lock_t {
     pthread_cond_t condition;
 };
 
+struct hash_t {
+    auto operator() (const record_t& rec) const {
+        return std::hash<int64_t>() (rec.first ^ 0x5555555555555555) ^ std::hash<int64_t>()(rec.second);
+    }
+};
+
 /* APIs for lock table */
 int init_lock_table();
-lock_t *lock_acquire(int table_id, int64_t key);
+lock_t *lock_acquire(table_t table_id, key__t key);
 int lock_release(lock_t* lock_obj);
-void printList();
+// void printList();
 #endif /* __LOCK_TABLE_H__ */
