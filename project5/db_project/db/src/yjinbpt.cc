@@ -19,6 +19,8 @@ table_t open_table(char* pathname) {
 // • Insert input ‘key/value’ (record) with its size to data file at the right place
 // • If success, return 0. Otherwise, return non-zero value.
 int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
+    printf("%s\n", __func__);
+
     char tmpv[123];
     u16_t tmps;
     mleaf_t leaf;
@@ -126,10 +128,6 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     pagenum_t pn = find_leaf_page(table_id, key);
     printf("found leaf page\n");
     page_t page;
-    std::string value;
-    for (int i = 0; i < new_val_size; ++i) {
-        value.push_back(values[i]);
-    }
     if (lock_acquire(table_id, pn, key, trx_id, 1) == NULL) { // deadlock -> abort
         trx_undo(trx_id);
         trx_release_locks(trx_id);
@@ -147,11 +145,14 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     if (iter != leaf.slots.end() && iter->key == key) { // key found
         auto& old = trx_table[trx_id].old_vals;
         auto it_old = old.find({table_id, key});
-        if (it_old == old.end()) old[{table_id, key}] = {pn, value};
+        int idx = iter - leaf.slots.begin();
+        if (it_old == old.end()) old[{table_id, key}] = {pn, leaf.values[idx]};
 
-        leaf.values[iter - leaf.slots.begin()] = value;
+        for (int i = 0; i < new_val_size && i < leaf.values[idx].size(); ++i) {
+            leaf.values[idx][i] = values[i];
+        }
         *old_val_size = iter->size;
-
+        
         page = leaf;
         buf_write_page(table_id, pn, &page);
         pthread_mutex_unlock(&(ctrl->mutex));
@@ -271,7 +272,7 @@ int cut_leaf(mleaf_t* leaf) {
  * the node to the left of the key to be inserted.
  */
 int get_left_index(minternal_t& internal /* parent */, pagenum_t left) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     for (int i = 0; i < internal.num_keys; ++i) {
         if (internal.children[i] == left) return i;
     }
@@ -284,7 +285,7 @@ int get_left_index(minternal_t& internal /* parent */, pagenum_t left) {
  * Returns the altered leaf page number.
  */
 pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string value) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     ctrl_t* ctrl_leaf = buf_read_page(fd, pn);
 
     mleaf_t leaf = *(ctrl_leaf->frame);
@@ -306,7 +307,7 @@ pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string val
 }
 
 int adjust(mleaf_t& leaf) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     int offset = 4096;
     int used_space = 0;
     for (int i = 0; i < leaf.num_keys; ++i) {
@@ -324,7 +325,7 @@ int adjust(mleaf_t& leaf) {
  * in half.
  */
 pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key, std::string value) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     ctrl_t* ctrl_new = buf_alloc_page(fd);
     pagenum_t new_pn = ctrl_new->tp.second;
     mleaf_t leaf, new_leaf;
@@ -393,7 +394,7 @@ pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key,
  */
 pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     page_t page;
     ctrl_t* ctrl = buf_read_page(fd, parent_pn);
     minternal_t parent = *(ctrl->frame);
@@ -421,7 +422,7 @@ pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn,
  */
 pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     page_t page;
     ctrl_t* ctrl_parent = buf_read_page(fd, parent_pn);
     minternal_t internal = *(ctrl_parent->frame);
@@ -501,7 +502,7 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
  * Returns the root of the tree after insertion.
  */
 pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t new_key, pagenum_t parent) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     if (parent == 0) {
         return insert_into_new_root(fd, pn, new_pn, new_key);
     }
@@ -534,7 +535,7 @@ pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t 
  * the new root.
  */
 pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t key) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     page_t page, new_page;
     ctrl_t* ctrl_pn = buf_read_page(fd, pn);
     ctrl_t* ctrl_new = buf_read_page(fd, new_pn);
@@ -591,7 +592,7 @@ pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__
  * start a new tree.
  */
 pagenum_t start_new_tree(table_t fd, key__t key, std::string value) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     ctrl_t* ctrl = buf_alloc_page(fd);
     pagenum_t pn = ctrl->tp.second;
     mleaf_t leaf(key, value);

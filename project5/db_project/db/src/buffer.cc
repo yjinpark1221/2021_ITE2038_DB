@@ -106,8 +106,8 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
             if (hc->tp.first == table_id) {
-                pthread_mutex_lock(&(hc->mutex));
                 pthread_mutex_unlock(&buf_latch);
+                pthread_mutex_lock(&(hc->mutex));
                 return hc;
             }
         }
@@ -136,17 +136,20 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     }
 
     // page latch
+    // HERE
+    pthread_mutex_unlock(&buf_latch);
     int tl = pthread_mutex_trylock(&ct->mutex);
     printf("trylock = %d\n", tl);
     if (tl != 0) pthread_mutex_lock(&(ct->mutex));
-    pthread_mutex_unlock(&buf_latch);
     printf("returning buf_read_page\n");
     return ct;
 }
 
 void buf_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
     printf("%s\n", __func__);
+    // HERE
     pthread_mutex_lock(&buf_latch);
+    printf("in write buf_latch locked");
     if (pagenum == 0) {
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
@@ -270,8 +273,7 @@ void move_to_tail(ctrl_t* ct) {
     }
     if (prev)prev->next = next;
     if (next)next->prev = prev;
-
-    if (tail.prev == &head) puts("!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    
     // printf("%p %p %p %p %p %p\n", &head, &tail, prev, next, last, ct);
     last->next = ct;
     ct->prev = last;
@@ -279,6 +281,7 @@ void move_to_tail(ctrl_t* ct) {
     ct->next = &tail;
     tail.prev = ct;
     printf("moved to tail\n");
+    if (tail.prev == &head) puts("!!!!!!!!!!!!!!!!!!!!!!!!!!");
     if (head.next == &tail) puts("??????????????????????????");
     // for (auto p = head.next; p != &tail;p = p->next) {
     //     printf("%d %d\n", p->tp.first, p->tp.second);
