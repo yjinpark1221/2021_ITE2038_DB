@@ -139,6 +139,11 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
         for (lock_t* l = entry->head; l; l = l->next) {
             if (l->record_id == key) has_predecessor = 1;
             if (l->record_id != key || l->trx_id != trx_id) continue;
+
+            // TODO : 선형 탐색 
+            // -> s 뒤에 다른 s 있으면 wait
+            // -> 없으면 x로 업그레이드
+
             // case : s lock found
             // do not need to acquire new lock
             if (l->lock_mode == SHARED) {

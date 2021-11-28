@@ -19,7 +19,6 @@ table_t open_table(char* pathname) {
 // • Insert input ‘key/value’ (record) with its size to data file at the right place
 // • If success, return 0. Otherwise, return non-zero value.
 int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
-    printf("%s\n", __func__);
     char tmpv[123];
     u16_t tmps;
     mleaf_t leaf;
@@ -125,19 +124,25 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
 int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size, uint16_t* old_val_size, int trx_id) {
     printf("%s\n", __func__);
     pagenum_t pn = find_leaf_page(table_id, key);
+    printf("found leaf page\n");
     page_t page;
     std::string value;
     for (int i = 0; i < new_val_size; ++i) {
         value.push_back(values[i]);
     }
-    ctrl_t* ctrl = buf_read_page(table_id, pn);
-    mleaf_t leaf = page;
     if (lock_acquire(table_id, pn, key, trx_id, 1) == NULL) { // deadlock -> abort
         trx_undo(trx_id);
         trx_release_locks(trx_id);
         trx_table.erase(trx_id);
         return 1;
     }
+    printf("acquired\n");
+    ctrl_t* ctrl = buf_read_page(table_id, pn);
+    mleaf_t leaf = *(ctrl->frame);
+    // for (int i = 0; i < leaf.slots.size(); ++i) {
+    //     printf("slot : %d %d %d\n", leaf.slots[i].key, leaf.slots[i].offset, leaf.slots[i].size);
+    //     printf("%s\n", leaf.values[i]);
+    // }
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
         auto& old = trx_table[trx_id].old_vals;
@@ -150,9 +155,15 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         page = leaf;
         buf_write_page(table_id, pn, &page);
         pthread_mutex_unlock(&(ctrl->mutex));
+        printf("page latch unlocked\n");
         return 0; 
     }
-    else return 1; // key not found
+    else {
+        printf("not found\n");
+        pthread_mutex_unlock(&(ctrl->mutex));
+        printf("page latch unlocked\n");
+        return 1; // key not found
+    }
 }
 
 // 4. int db_delete (int64_t table_id, int64_t key);
@@ -175,7 +186,7 @@ int db_delete (table_t table_id, key__t key) {
 // • The total number of tables is less than 20.
 // • If success, return 0. Otherwise, return non-zero value.
 int init_db(int num_buf) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     return buf_init(num_buf) || trx_init_table() || init_lock_table();
 }
 
@@ -184,17 +195,18 @@ int init_db(int num_buf) {
 // • Clean up everything.
 // • If success, return 0. Otherwise, return non-zero value.
 int shutdown_db() {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     buf_close_table_file();
     return 0;
 }
 
 pagenum_t get_root_page(table_t fd) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     ctrl_t* ctrl = buf_read_page(fd, 0);
     // header page
 
     pagenum_t pn = ((pagenum_t*)(ctrl->frame))[16 / 8];
+        printf("page latch unlocked\n");
     pthread_mutex_unlock(&(ctrl->mutex));
     return pn;
 }
@@ -220,6 +232,7 @@ pagenum_t find_leaf_page(table_t fd, key__t key) {
     c = *(ctrl->frame);
     while (!c.is_leaf) {
         internal = *(ctrl->frame);
+        printf("page latch unlocked\n");
         pthread_mutex_unlock(&(ctrl->mutex));
 
         auto iter = std::upper_bound(internal.keys.begin(), internal.keys.end(), key);
@@ -236,12 +249,12 @@ pagenum_t find_leaf_page(table_t fd, key__t key) {
 }
 
 bool cmp_slot(mslot_t a, mslot_t b) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     return a.key < b.key;
 }
 
 int cut_leaf(mleaf_t* leaf) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     int i = 0;
     for (int sum = 0; i < leaf->num_keys; ++i) {
         sum += leaf->slots[i].size + 12;
@@ -258,7 +271,7 @@ int cut_leaf(mleaf_t* leaf) {
  * the node to the left of the key to be inserted.
  */
 int get_left_index(minternal_t& internal /* parent */, pagenum_t left) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     for (int i = 0; i < internal.num_keys; ++i) {
         if (internal.children[i] == left) return i;
     }
@@ -271,7 +284,7 @@ int get_left_index(minternal_t& internal /* parent */, pagenum_t left) {
  * Returns the altered leaf page number.
  */
 pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string value) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     ctrl_t* ctrl_leaf = buf_read_page(fd, pn);
 
     mleaf_t leaf = *(ctrl_leaf->frame);
@@ -293,7 +306,7 @@ pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string val
 }
 
 int adjust(mleaf_t& leaf) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     int offset = 4096;
     int used_space = 0;
     for (int i = 0; i < leaf.num_keys; ++i) {
@@ -311,7 +324,7 @@ int adjust(mleaf_t& leaf) {
  * in half.
  */
 pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key, std::string value) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     ctrl_t* ctrl_new = buf_alloc_page(fd);
     pagenum_t new_pn = ctrl_new->tp.second;
     mleaf_t leaf, new_leaf;
@@ -380,7 +393,7 @@ pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key,
  */
 pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     page_t page;
     ctrl_t* ctrl = buf_read_page(fd, parent_pn);
     minternal_t parent = *(ctrl->frame);
@@ -408,7 +421,7 @@ pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn,
  */
 pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t new_pn, 
         key__t key, pagenum_t parent_pn, int left_index) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     page_t page;
     ctrl_t* ctrl_parent = buf_read_page(fd, parent_pn);
     minternal_t internal = *(ctrl_parent->frame);
@@ -488,7 +501,7 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
  * Returns the root of the tree after insertion.
  */
 pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t new_key, pagenum_t parent) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     if (parent == 0) {
         return insert_into_new_root(fd, pn, new_pn, new_key);
     }
@@ -521,7 +534,7 @@ pagenum_t insert_into_parent(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t 
  * the new root.
  */
 pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__t key) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     page_t page, new_page;
     ctrl_t* ctrl_pn = buf_read_page(fd, pn);
     ctrl_t* ctrl_new = buf_read_page(fd, new_pn);
@@ -578,7 +591,7 @@ pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__
  * start a new tree.
  */
 pagenum_t start_new_tree(table_t fd, key__t key, std::string value) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     ctrl_t* ctrl = buf_alloc_page(fd);
     pagenum_t pn = ctrl->tp.second;
     mleaf_t leaf(key, value);
@@ -606,7 +619,7 @@ pagenum_t start_new_tree(table_t fd, key__t key, std::string value) {
 // if pn is leftmost(first_child) -> -1
 // else index
 int get_index(table_t fd, pagenum_t pn) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     /* Return the index of the key to the left
      * of the pointer in the parent pointing
      * to n.  
@@ -636,7 +649,7 @@ int get_index(table_t fd, pagenum_t pn) {
 }
 
 void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     page_t page;
     ctrl_t* ctrl = buf_read_page(fd, pn);
     mnode_t node = *(ctrl->frame);
@@ -654,7 +667,6 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
         --leaf.num_keys;
         adjust(leaf); // adjust offset and free_space
         page = leaf;
-        if (VERBOSE) print(leaf);
         buf_write_page(fd, pn, &page);
         pthread_mutex_unlock(&(ctrl->mutex));
     }
@@ -675,14 +687,13 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
 
         --internal.num_keys;
         page = internal;
-        if (VERBOSE) print(internal);
         buf_write_page(fd, pn, &page);
         pthread_mutex_unlock(&(ctrl->mutex));
     }
 }
 
 int adjust_root(table_t fd, pagenum_t pn) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     page_t page;
     ctrl_t* ctrl = buf_read_page(fd, pn);
     mnode_t node = *(ctrl->frame);
@@ -737,7 +748,7 @@ int adjust_root(table_t fd, pagenum_t pn) {
  * without exceeding the maximum.
  */
 int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*index of pn*/, int k_prime) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     /* Swap neighbor with node if node is on the
      * extreme left and neighbor is to its right.
      * after this, neighbor is on the left of node
@@ -824,7 +835,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
  */
 // all of them needs to be pinned and unpinned
 int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*pn's index*/, int k_prime_index, int k_prime) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     page_t page, neighbor_page;
     ctrl_t* ctrl_pn = buf_read_page(fd, pn);
     ctrl_t* ctrl_neighbor = buf_read_page(fd, neighbor_pn);
@@ -962,7 +973,7 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
  */
 
 int delete_entry(table_t fd, pagenum_t pn, key__t key) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     // Remove key and pointer from node.
     remove_entry_from_node(fd, pn, key);
     
@@ -996,7 +1007,7 @@ int delete_entry(table_t fd, pagenum_t pn, key__t key) {
         }
     }
     else {
-        if (VERBOSE) printf("case inter\n");
+        // if (VERBOSE) printf("case inter\n");
         minternal_t internal = page;
 
         /* Case: node stays at or above minimum.

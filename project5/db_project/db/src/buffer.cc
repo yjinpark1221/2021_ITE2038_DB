@@ -97,7 +97,7 @@ void buf_free_page(table_t table_id, pagenum_t pagenum) {
 }
 
 ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
-    printf("%s\n", __func__);
+    printf("%s %d\n", __func__, pagenum);
     pthread_mutex_lock(&buf_latch);
     printf("buf_latch catched\n");
     // reading header page -> must be in hcontrol block
@@ -136,7 +136,9 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     }
 
     // page latch
-    pthread_mutex_lock(&(ct->mutex));
+    int tl = pthread_mutex_trylock(&ct->mutex);
+    printf("trylock = %d\n", tl);
+    if (tl != 0) pthread_mutex_lock(&(ct->mutex));
     pthread_mutex_unlock(&buf_latch);
     printf("returning buf_read_page\n");
     return ct;
@@ -262,11 +264,14 @@ void read_header(table_t table_id) {
 void move_to_tail(ctrl_t* ct) {
     printf("%s\n", __func__);
     ctrl_t* prev = ct->prev, *next = ct->next, *last = tail.prev;
-    if (last == ct) return;
+    if (last == ct) {
+        printf("already last\n");
+        return;
+    }
     if (prev)prev->next = next;
     if (next)next->prev = prev;
 
-    // if (tail.prev == &head) puts("!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    if (tail.prev == &head) puts("!!!!!!!!!!!!!!!!!!!!!!!!!!");
     // printf("%p %p %p %p %p %p\n", &head, &tail, prev, next, last, ct);
     last->next = ct;
     ct->prev = last;
@@ -274,8 +279,7 @@ void move_to_tail(ctrl_t* ct) {
     ct->next = &tail;
     tail.prev = ct;
     printf("moved to tail\n");
-    // printf("move to tail done\n");
-    // if (head.next == &tail) puts("??????????????????????????");
+    if (head.next == &tail) puts("??????????????????????????");
     // for (auto p = head.next; p != &tail;p = p->next) {
     //     printf("%d %d\n", p->tp.first, p->tp.second);
     // }
