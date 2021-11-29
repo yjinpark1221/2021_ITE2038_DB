@@ -126,11 +126,11 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
 int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size, uint16_t* old_val_size, int trx_id) {
     //printf("%d %s\n", trx_id, __func__);
     pagenum_t pn = find_leaf_page(table_id, key);
-    printf("leaf page number %d\n", pn);
+    // printf("leaf page number %d\n", pn);
     page_t page;
     ctrl_t* ctrl = buf_read_page(table_id, pn);
     mleaf_t leaf = *(ctrl->frame);
-    printf("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
+    // printf("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
     pthread_mutex_unlock(&ctrl->mutex);
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
@@ -144,10 +144,10 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         ctrl = buf_read_page(table_id, pn);
         leaf = *(ctrl->frame);
         iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
-        printf("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
+        // printf("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
         
         int idx = iter - leaf.slots.begin();
-        printf("idx %d\n", idx);
+        // printf("idx %d\n", idx);
         // if (trx_table[trx_id].old_vals.find({table_id, key}) == trx_table[trx_id].old_vals.end()) trx_table[trx_id].old_vals[{table_id, key}] = {pn, leaf.values[idx]};
         // std::string old_value = leaf.values[idx];
         // std::string new_value = "";

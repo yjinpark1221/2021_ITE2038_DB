@@ -134,21 +134,22 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     else {
         for (lock_t* l = entry->head; l; l = l->next) {
             if (l->record_id == key) has_predecessor = 1;
-            if (l->record_id != key || l->trx_id != trx_id) continue;
-
+            if (l->record_id != key || l->trx_id == trx_id) continue;
+            
             // case : s lock found
             if (l->lock_mode == SHARED) {
                 lock_t* last = entry->tail;
                 // check if it is the last lock of the record
                 bool is_last = 1;
-                for (lock_t* ll = l->next; ll; ll = ll->next) {
-                    if (ll->record_id == key) {
+                for (lock_t* ll = entry->head; ll; ll = ll->next) {
+                    if (ll->record_id == key && ll != l) {
                         is_last = 0;
                         break;
                     }
                 }
-                // if last-> do not wait
+                // if last-> do not wait and upgrade the lock to EXCLUSIVE
                 if (is_last) {
+                    l->lock_mode = EXCLUSIVE;
                     if (pthread_mutex_unlock(&lock_table_latch)) {
                     //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
                         return NULL;
@@ -345,6 +346,7 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
         lock_t* fr = q.front();
         q.pop();
         if (fr->trx_id == trx_id) {
+            printf("deadlock\n");
             return 1;
         }
         for (lock_t* l = fr->prev; l; l = l->prev) {
