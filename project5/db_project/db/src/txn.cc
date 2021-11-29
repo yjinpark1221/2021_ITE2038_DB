@@ -122,10 +122,6 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             // case : s lock or x lock found 
             // do not need to acquire new lock
             else {
-                // if (pthread_cond_wait(&(l->condition), &lock_table_latch)) {
-                //     //printf("in lock_acquire pthread_cond_wait nonzero return value");
-                //     return NULL;
-                // }
                 if (pthread_mutex_unlock(&lock_table_latch)) {
                     //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
                     return NULL;
@@ -140,18 +136,49 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             if (l->record_id == key) has_predecessor = 1;
             if (l->record_id != key || l->trx_id != trx_id) continue;
 
-            // TODO : 선형 탐색 
-            // -> s 뒤에 다른 s 있으면 wait
-            // -> 없으면 x로 업그레이드
-
             // case : s lock found
-            // do not need to acquire new lock
             if (l->lock_mode == SHARED) {
-                l->lock_mode = EXCLUSIVE;
-                // if (pthread_cond_wait(&(l->condition), &lock_table_latch)) {
-                //     //printf("in lock_acquire pthread_cond_wait nonzero return value");
-                //     return NULL;
-                // }
+                lock_t* last = entry->tail;
+                // check if it is the last lock of the record
+                bool is_last = 1;
+                for (lock_t* ll = l->next; ll; ll = ll->next) {
+                    if (ll->record_id == key) {
+                        is_last = 0;
+                        break;
+                    }
+                }
+                // if last-> do not wait
+                if (is_last) {
+                    if (pthread_mutex_unlock(&lock_table_latch)) {
+                    //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
+                        return NULL;
+                    }                
+                    return l;
+                }
+                // if not last -> check dead lock and wait
+
+                // case : deadlock
+                if (cycle_made(table_id, page_id, key, trx_id, lock_mode)) {
+                    return NULL;
+                }
+
+                lock_t* lock = (lock_t*)malloc(sizeof(lock_t));
+                //printf("entry->head != NULL\n");
+                last->next = lock;
+                lock->prev = last;
+                lock->next = NULL;
+                entry->tail = lock;
+                lock->sentinel = entry;
+                lock->record_id = key;
+                lock->lock_mode = lock_mode;
+                if (pthread_cond_init(&(lock->condition), NULL)) {
+                    //printf("in lock_acquire pthread_cond_init nonzero return value");
+                    return NULL;
+                }
+                if (pthread_cond_wait(&(lock->condition), &lock_table_latch)) {
+                    //printf("in lock_acquire pthread_cond_wait nonzero return value");
+                    return NULL;
+                }
                 if (pthread_mutex_unlock(&lock_table_latch)) {
                     //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
                     return NULL;
@@ -231,6 +258,17 @@ int lock_release(lock_t* lock_obj) {
     }
 
     lock_entry_t* entry = lock_obj->sentinel;
+    bool is_first = 0;
+
+    // find the first lock of the record -> flag
+    for (lock_t* l = entry->head; l; l = l->next) {
+        if (l->record_id == lock_obj->record_id) {
+            if (l == lock_obj) is_first = 1;
+            break;
+        }
+    }
+
+    // remove from list
     if (entry->head == lock_obj) {
         entry->head = lock_obj->next;
     }
@@ -244,36 +282,46 @@ int lock_release(lock_t* lock_obj) {
     else {
         lock_obj->next->prev = lock_obj->prev;
     }
-    // signal next lock objects
-    if (lock_obj->lock_mode == 0) { // shared
-        for (lock_t* l = lock_obj->sentinel->head; l; l = l->next) {
-            if (l->record_id != lock_obj->record_id) continue;  // different record
-            else if (l->lock_mode == 0) break;          // found s lock
-            else {
-                pthread_cond_signal(&(l->condition));  // found x lock -> signal
-                break;
-            }
-        }   
-    }
-    else {
-        for (lock_t* l = lock_obj->sentinel->head; l; l = l->next) {
-            if (l->record_id != lock_obj->record_id) continue;  // different record
-            else if (l->lock_mode == 0) {               // found s lock -> signal s locks
+
+
+    // case : releasing first lock of the record
+    if (is_first) {
+        for (lock_t* l = entry->head; l; l = l->next) {
+            if (l->record_id != lock_obj->record_id) continue;
+
+            // case : first lock is SHARED
+            if (l->lock_mode == SHARED) {
+                int cnt = 0;
+                pthread_cond_signal(&l->condition);
                 for (; l; l = l->next) {
                     if (l->record_id != lock_obj->record_id) continue;
-                    else if (l->lock_mode == 0) {
-                        pthread_cond_signal(&(l->condition));
+                    // second~  lock is SHARED
+                    if (l->lock_mode == SHARED) {
+                        ++cnt;
+                        pthread_cond_signal(&l->condition);
                     }
-                    else break;                         // found x lock -> stop
+                    // second~ lock is EXCLUSIVE
+                    else {
+                        // case : (first)S1 -> (second)X1 
+                        // acquire X1 too
+                        if (l->trx_id == lock_obj->trx_id && cnt == 0) {
+                            pthread_cond_signal(&l->condition);
+                        }
+                        break;
+                    }
                 }
                 break;
             }
-            else {                                      // found x lock -> signal
-                pthread_cond_signal(&(l->condition));
+            // case : first lock is EXCLUSIVE
+            else {
+                pthread_cond_signal(&l->condition);
                 break;
             }
         }
     }
+    // case : not first -> do not need to signal next locks
+
+
     free(lock_obj);
     if (pthread_mutex_unlock(&lock_table_latch)) {
         //printf("in lock_release pthread_mutex_unlock nonzero return value");
