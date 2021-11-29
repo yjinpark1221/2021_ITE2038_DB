@@ -8,7 +8,7 @@ std::map<int, trx_entry_t> trx_table;
 std::unordered_map<std::pair<table_t, key__t>, lock_entry_t, hash_t> lock_table;
 
 bool trx_init_table() {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     return pthread_mutex_init(&trx_table_latch, NULL);
 }
 
@@ -17,9 +17,9 @@ bool trx_init_table() {
 // • Note that the transaction id should be unique for each transaction; that is, you need to allocate a
 // transaction id holding a mutex.
 int trx_begin(void) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     if (pthread_mutex_lock(&trx_table_latch)) {
-        printf("in trx_begin pthread_mutex_lock\n");
+        //printf("in trx_begin pthread_mutex_lock\n");
         return 0;
     }
     static int transaction_id = 1;
@@ -27,7 +27,7 @@ int trx_begin(void) {
     trx_table[transaction_id] = entry;
     int ret = transaction_id++;
     if (pthread_mutex_unlock(&trx_table_latch)) {
-        printf("in trx_begin pthread_mutex_unlock\n");
+        //printf("in trx_begin pthread_mutex_unlock\n");
         return 0;
     }
     return ret;
@@ -37,25 +37,25 @@ int trx_begin(void) {
 // been used in your lock manager. (Shrinking phase of strict 2PL)
 // • Return the completed transaction id if success, otherwise return 0.
 int trx_commit(int trx_id) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     if (pthread_mutex_lock(&trx_table_latch)) {
-        printf("in trx_commit pthread_mutex_lock\n");
+        //printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
     if (trx_release_locks(trx_id)) {
-        printf("in trx_commit trx_release_locks\n");
+        //printf("in trx_commit trx_release_locks\n");
         return 0;
     }
     trx_table.erase(trx_id);
     if (pthread_mutex_unlock(&trx_table_latch)) {
-        printf("in trx_commit pthread_mutex_unlock\n");
+        //printf("in trx_commit pthread_mutex_unlock\n");
         return 0;
     }
     return trx_id;
 }
 
 int trx_undo(int trx_id) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     auto& entry = trx_table[trx_id];
     for (auto old : entry.old_vals) {
         table_t table_id = old.first.first;
@@ -77,7 +77,7 @@ int trx_undo(int trx_id) {
 }
 
 int trx_release_locks(int trx_id) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     lock_t* lock = trx_table[trx_id].head;
     for (; lock; lock = lock->trx_next) {
         if (lock_release(lock)) return 1;
@@ -89,7 +89,7 @@ int trx_release_locks(int trx_id) {
 // • Initialize any data structures required for implementing lock table, such as hash table, lock table latch, etc.
 // • If success, return 0. Otherwise, return non-zero value.
 int init_lock_table() {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     return pthread_mutex_init(&lock_table_latch, NULL);
 }
 
@@ -99,9 +99,9 @@ int init_lock_table() {
 // • If an error occurs, return NULL.
 // • lock_mode: 0 (SHARED) or 1 (EXCLUSIVE)
 lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     if (pthread_mutex_lock(&lock_table_latch)) {
-        printf("in lock_acquire pthread_mutex_lock nonzero return value");
+        //printf("in lock_acquire pthread_mutex_lock nonzero return value");
         return NULL;
     }
 
@@ -123,11 +123,11 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             // do not need to acquire new lock
             else {
                 // if (pthread_cond_wait(&(l->condition), &lock_table_latch)) {
-                //     printf("in lock_acquire pthread_cond_wait nonzero return value");
+                //     //printf("in lock_acquire pthread_cond_wait nonzero return value");
                 //     return NULL;
                 // }
                 if (pthread_mutex_unlock(&lock_table_latch)) {
-                    printf("in lock_acquire pthread_mutex_unlock nonzero return value");
+                    //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
                     return NULL;
                 }                
                 return l;
@@ -149,11 +149,11 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             if (l->lock_mode == SHARED) {
                 l->lock_mode = EXCLUSIVE;
                 // if (pthread_cond_wait(&(l->condition), &lock_table_latch)) {
-                //     printf("in lock_acquire pthread_cond_wait nonzero return value");
+                //     //printf("in lock_acquire pthread_cond_wait nonzero return value");
                 //     return NULL;
                 // }
                 if (pthread_mutex_unlock(&lock_table_latch)) {
-                    printf("in lock_acquire pthread_mutex_unlock nonzero return value");
+                    //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
                     return NULL;
                 }                
                 return l;
@@ -162,11 +162,11 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             // do not need to acquire new lock
             else {
                 // if (pthread_cond_wait(&(l->condition), &lock_table_latch)) {
-                //     printf("in lock_acquire pthread_cond_wait nonzero return value");
+                //     //printf("in lock_acquire pthread_cond_wait nonzero return value");
                 //     return NULL;
                 // }
                 if (pthread_mutex_unlock(&lock_table_latch)) {
-                    printf("in lock_acquire pthread_mutex_unlock nonzero return value");
+                    //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
                     return NULL;
                 }                
                 return l;
@@ -182,7 +182,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             return NULL;
         }
 
-        printf("entry->head != NULL\n");
+        //printf("entry->head != NULL\n");
         last->next = lock;
         lock->prev = last;
         lock->next = NULL;
@@ -191,11 +191,11 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
         lock->record_id = key;
         lock->lock_mode = lock_mode;
         if (pthread_cond_init(&(lock->condition), NULL)) {
-            printf("in lock_acquire pthread_cond_init nonzero return value");
+            //printf("in lock_acquire pthread_cond_init nonzero return value");
             return NULL;
         }
         if (pthread_cond_wait(&(lock->condition), &lock_table_latch)) {
-            printf("in lock_acquire pthread_cond_wait nonzero return value");
+            //printf("in lock_acquire pthread_cond_wait nonzero return value");
             return NULL;
         }
     }
@@ -206,17 +206,17 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
         lock->sentinel = entry;
         lock->lock_mode = lock_mode;
         if (pthread_cond_init(&(lock->condition), NULL)) {
-            printf("in lock_acquire pthread_cond_init nonzero return value");
+            //printf("in lock_acquire pthread_cond_init nonzero return value");
             return NULL;
         }
         entry->head = entry->tail = lock;
     }
 
     if (pthread_mutex_unlock(&lock_table_latch)) {
-        printf("in lock_acquire pthread_mutex_unlock nonzero return value");
+        //printf("in lock_acquire pthread_mutex_unlock nonzero return value");
         return NULL;
     }
-    printf("returning lock\n");
+    //printf("returning lock\n");
     return lock;
 }
 
@@ -224,9 +224,9 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
 // • If there is a successor’s lock waiting for the thread releasing the lock, wake up the successor.
 // • If success, return 0. Otherwise, return non-zero value.
 int lock_release(lock_t* lock_obj) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     if (pthread_mutex_lock(&lock_table_latch)) {
-        printf("in lock_release pthread_mutex_lock nonzero return value");
+        //printf("in lock_release pthread_mutex_lock nonzero return value");
         return 1;
     }
 
@@ -276,14 +276,14 @@ int lock_release(lock_t* lock_obj) {
     }
     free(lock_obj);
     if (pthread_mutex_unlock(&lock_table_latch)) {
-        printf("in lock_release pthread_mutex_unlock nonzero return value");
+        //printf("in lock_release pthread_mutex_unlock nonzero return value");
         return 1;
     }
     return 0;
 }
 
 bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     std::queue<lock_t*> q;
     auto& entry = lock_table[{table_id, pn}];
     for (lock_t* tail = entry.tail; tail; tail = tail->prev) {
@@ -292,7 +292,7 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
             break;
         }
     }
-    printf("q.size = %d\n", q.size());
+    //printf("q.size = %d\n", q.size());
     for (; !q.empty();) {
         lock_t* fr = q.front();
         q.pop();
@@ -304,6 +304,6 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
         }
         if (fr->trx_next) q.push(fr->trx_next);
     }
-    printf("returning 0\n");
+    //printf("returning 0\n");
     return 0;
 }

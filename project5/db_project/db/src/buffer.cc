@@ -16,7 +16,7 @@ int cur_buf;
 static ctrl_t head, tail;
 
 int buf_init(int nb) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     head.next = &tail;
     tail.prev = &head;
     head.prev = NULL;
@@ -39,7 +39,7 @@ int buf_init(int nb) {
 }
 
 table_t buf_open_table_file(const char* pathname) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
     table_t table_id = file_open_table_file(pathname);
     page_t hp;
@@ -53,7 +53,7 @@ table_t buf_open_table_file(const char* pathname) {
 }
 
 void buf_close_table_file() {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
     // flush headers 
     for (int i = 0; i < openedFds.size(); ++i) {
@@ -76,7 +76,7 @@ void buf_close_table_file() {
 }
 
 ctrl_t* buf_alloc_page(table_t table_id) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
     flush_header(table_id);
     pagenum_t pn = file_alloc_page(table_id);
@@ -88,7 +88,7 @@ ctrl_t* buf_alloc_page(table_t table_id) {
 }
 
 void buf_free_page(table_t table_id, pagenum_t pagenum) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
     flush_header(table_id);
     file_free_page(table_id, pagenum);
@@ -97,12 +97,12 @@ void buf_free_page(table_t table_id, pagenum_t pagenum) {
 }
 
 ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
-    printf("%s %d\n", __func__, pagenum);
+    //printf("%s %d\n", __func__, pagenum);
     pthread_mutex_lock(&buf_latch);
-    printf("buf_latch catched\n");
+    //printf("buf_latch catched\n");
     // reading header page -> must be in hcontrol block
     if (pagenum == 0) {
-        printf("\theader page\n");
+        //printf("\theader page\n");
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
             if (hc->tp.first == table_id) {
@@ -121,7 +121,7 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     // not in cache
     if (iter == tp2control.end()) {
         // LRU flush
-        printf("not in cache\n");
+        //printf("not in cache\n");
         ct = flush_LRU(table_id, pagenum);
         tp2control[{table_id, pagenum}] = ct;
         move_to_tail(ct);
@@ -130,7 +130,7 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     }
     // in cache
     else {
-        printf("in cache\n");
+        //printf("in cache\n");
         ct = iter->second;        
         move_to_tail(ct);
     }
@@ -138,18 +138,16 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     // page latch
     // HERE
     pthread_mutex_unlock(&buf_latch);
-    int tl = pthread_mutex_trylock(&ct->mutex);
-    printf("trylock = %d\n", tl);
-    if (tl != 0) pthread_mutex_lock(&(ct->mutex));
-    printf("returning buf_read_page\n");
+    pthread_mutex_lock(&(ct->mutex));
+    //printf("returning buf_read_page\n");
     return ct;
 }
 
 void buf_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     // HERE
     pthread_mutex_lock(&buf_latch);
-    printf("in write buf_latch locked");
+    //printf("in write buf_latch locked\n");
     if (pagenum == 0) {
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
@@ -181,12 +179,12 @@ void buf_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
 }
 
 ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     // case : buffer not full 
     // -> no need to flush 
     // -> control[end] = {table_id, pagenum}
     if (cur_buf < num_buf) {
-        // printf("cur_buf %d\n", cur_buf);
+        // //printf("cur_buf %d\n", cur_buf);
         control[cur_buf].tp = {table_id, pagenum};
         control[cur_buf].is_dirty = 0;
         control[cur_buf].frame = cache + cur_buf;
@@ -199,14 +197,12 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
         ++cur_buf;
         return control + cur_buf - 1;
     }
-
     ctrl_t* ct;
-    int count = num_buf;
-    for (ct = head.next; ct != &tail ; ct = ct->next) {
+    for (ct = head.next; ; ct = ct->next) {
+        //printf("cur %d\n", count);
         if (ct == &tail) ct = head.next;
         if (pthread_mutex_trylock(&(ct->mutex)) == EBUSY) continue;
         else {
-            pthread_mutex_unlock(&(ct->mutex));
             break;
         }
     }   
@@ -218,18 +214,20 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
     }
     tp2control.erase(iter);
     flush(ct);
+    //printf("FLUSHHHHHH");
     ct->tp = {table_id, pagenum};
     tp2control[{table_id, pagenum}] = ct;
     ct->is_dirty = 0;
 
     move_to_tail(ct);
+    pthread_mutex_unlock(&ct->mutex);
     return ct;
 }
 
 // This function writes the frame to disk if it is dirty
 // called flushing the head.next
 void flush(ctrl_t* ctrl) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     // TODO : check if mutex is unlocked
     if (ctrl->is_dirty) {
         file_write_page(ctrl->tp.first, ctrl->tp.second, ctrl->frame);
@@ -239,7 +237,7 @@ void flush(ctrl_t* ctrl) {
 
 // This function flushes the header page of the table_id 
 void flush_header(table_t table_id) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     for (int i = 0; i < openedFds.size(); ++i) {
         ctrl_t* hc = hcontrol + i;
         if (hc->tp.first == 0) return;
@@ -252,7 +250,7 @@ void flush_header(table_t table_id) {
 
 // This function flushes the header page of the table_id 
 void read_header(table_t table_id) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     for (int i = 0; i < openedFds.size(); ++i) {
         ctrl_t* hc = hcontrol + i;
         if (hc->tp.first == 0) return;
@@ -265,25 +263,26 @@ void read_header(table_t table_id) {
 // This function moves ct to the tail
 // called when referenced
 void move_to_tail(ctrl_t* ct) {
-    printf("%s\n", __func__);
+    //printf("%s\n", __func__);
     ctrl_t* prev = ct->prev, *next = ct->next, *last = tail.prev;
     if (last == ct) {
-        printf("already last\n");
+        //printf("already last\n");
         return;
     }
     if (prev)prev->next = next;
     if (next)next->prev = prev;
     
-    // printf("%p %p %p %p %p %p\n", &head, &tail, prev, next, last, ct);
+    //printf("%p %p %p %p %p %p\n", &head, &tail, prev, next, last, ct);
     last->next = ct;
     ct->prev = last;
 
     ct->next = &tail;
     tail.prev = ct;
-    printf("moved to tail\n");
+    //printf("moved to tail\n");
     if (tail.prev == &head) puts("!!!!!!!!!!!!!!!!!!!!!!!!!!");
     if (head.next == &tail) puts("??????????????????????????");
     // for (auto p = head.next; p != &tail;p = p->next) {
-    //     printf("%d %d\n", p->tp.first, p->tp.second);
+    //     //printf("%d %d\n", p->tp.first, p->tp.second);
     // }
 }
+
