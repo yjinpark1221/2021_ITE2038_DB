@@ -66,6 +66,7 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
 bool trx_init_table();
 int trx_begin(void);
 int trx_commit(int trx_id);
+int trx_abort(int trx_id);
 int trx_undo(int trx_id);
 int trx_release_locks(int trx_id);
 

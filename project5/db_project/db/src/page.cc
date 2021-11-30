@@ -9,7 +9,7 @@ page_t::page_t(mleaf_t& leaf) {
         exit(0);
     }
     ((pagenum_t*)a)[0 / 8] = leaf.parent;
-    ((u32_t*)a)[8 / 4] = leaf.is_leaf;
+    ((u32_t*)a)[8 / 4] = 1;
     ((u32_t*)a)[12 / 4] = leaf.num_keys;
     ((pagenum_t*)a)[112 / 8] = leaf.free_space;
     ((pagenum_t*)a)[120 / 8] = leaf.right_sibling;
@@ -27,7 +27,7 @@ page_t::page_t(minternal_t& node) {
         exit(0);
     }
     ((pagenum_t*)a)[0 / 8] = node.parent;
-    ((u32_t*)a)[8 / 4] = node.is_leaf;
+    ((u32_t*)a)[8 / 4] = 0;
     ((u32_t*)a)[12 / 4] = node.num_keys;
     ((pagenum_t*)a)[120 / 8] = node.first_child;
     for (int i = 0; i < node.num_keys; ++i) {

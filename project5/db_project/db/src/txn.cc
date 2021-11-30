@@ -53,7 +53,21 @@ int trx_commit(int trx_id) {
     }
     return trx_id;
 }
-
+int trx_abort(int trx_id) {
+    if (pthread_mutex_lock(&trx_table_latch)) {
+        //printf("in trx_commit pthread_mutex_lock\n");
+        return 0;
+    }
+    trx_undo(trx_id);
+    trx_release_locks(trx_id);
+    trx_table.erase(trx_id);
+    //printf("deadlock\n");
+    if (pthread_mutex_unlock(&trx_table_latch)) {
+        //printf("in trx_commit pthread_mutex_unlock\n");
+        return 0;
+    }
+    return 1;
+}
 int trx_undo(int trx_id) {
     //printf("%s\n", __func__);
     auto& entry = trx_table[trx_id];
