@@ -14,6 +14,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
 # Options for libraries
 option(USE_DB "Use the DB library" ON)
@@ -33,6 +35,8 @@ endif()
 add_executable(${CMAKE_PROJECT_NAME} main.cc)
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC ${EXTRA_LIBS})
+target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC ${EXTRA_LIBS}
+                      Threads::Threads)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC
   "${PROJECT_BINARY_DIR}"

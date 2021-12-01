@@ -99,10 +99,8 @@ void buf_free_page(table_t table_id, pagenum_t pagenum) {
 ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     //printf("%s %d\n", __func__, pagenum);
     pthread_mutex_lock(&buf_latch);
-    //printf("buf_latch catched\n");
     // reading header page -> must be in hcontrol block
     if (pagenum == 0) {
-        //printf("\theader page\n");
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
             if (hc->tp.first == table_id) {
@@ -121,7 +119,6 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     // not in cache
     if (iter == tp2control.end()) {
         // LRU flush
-        //printf("not in cache\n");
         ct = flush_LRU(table_id, pagenum);
         tp2control[{table_id, pagenum}] = ct;
         move_to_tail(ct);
@@ -130,13 +127,11 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     }
     // in cache
     else {
-        //printf("in cache\n");
         ct = iter->second;        
         move_to_tail(ct);
     }
 
     // page latch
-    // HERE
     pthread_mutex_unlock(&buf_latch);
     pthread_mutex_lock(&(ct->mutex));
     //printf("returning buf_read_page\n");
