@@ -42,10 +42,10 @@ table_t file_open_table_file(const char* pathname) {
                 perror("in file_open_database_file pwrite error");
                 exit(0);
             }
-            sync();
         }
         free(buf);
     }
+    sync();
     table_t table_id = next_table_id();
     fd2table[fd] = table_id;
     table2fd[table_id] = fd;
