@@ -35,7 +35,7 @@ struct lock_t {
 
 struct hash_t {
     auto operator() (const std::pair<table_t, pagenum_t>& rec) const {
-        return std::hash<int64_t>() (rec.first ^ 0x5555555555555555) ^ std::hash<int64_t>()(rec.second);
+        return std::hash<int64_t>() (rec.first ^ 0x5555555555555555LL) ^ std::hash<int64_t>()(rec.second);
     }
 };
 
@@ -69,5 +69,5 @@ int trx_commit(int trx_id);
 int trx_abort(int trx_id);
 int trx_undo(int trx_id);
 int trx_release_locks(int trx_id);
-
+void push_back_lock(lock_t*);
 #endif /* __TXN_H__ */
