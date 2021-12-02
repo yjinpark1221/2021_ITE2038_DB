@@ -1,2 +1,4 @@
 build/
 dbtest.sh
+lock_test.cc
+.vscode/

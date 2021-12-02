@@ -253,14 +253,6 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     if (lock_mode == SHARED && has_slock && !has_xlock) {
         // printf("S1S2S3\n");
         // 락 매달고 안기다리고 리턴
-        // case : deadlock
-        if (cycle_made(table_id, page_id, key, trx_id, lock_mode)) {
-            if (pthread_mutex_unlock(&lock_table_latch)) {
-                // printf("in lock_acquire pthread_mutex_unlock nonzero return value");
-                return NULL;
-            }
-            return NULL;
-        }
         push_back_lock(lock);
 
         if (pthread_cond_init(&(lock->condition), NULL)) {
