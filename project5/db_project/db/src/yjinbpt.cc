@@ -94,7 +94,9 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
 
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
+        if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 0);
         if (trx_id && lock_acquire(table_id, pn, key, trx_id, 0) == NULL) { // deadlock -> abort
+            printf("begin trx_abort\n");
             trx_abort(trx_id);
             return 1;
         }
@@ -133,7 +135,9 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     pthread_mutex_unlock(&ctrl->mutex);
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
+        if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 1);
         if (lock_acquire(table_id, pn, key, trx_id, 1) == NULL) { // deadlock -> abort
+            printf("begin trx_abort\n");
             trx_abort(trx_id);
             return 1;
         }
