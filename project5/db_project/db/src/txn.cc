@@ -45,6 +45,7 @@ int trx_commit(int trx_id) {
         // printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
+    // printf("trx_table_latch caught\n");
     if (trx_release_locks(trx_id)) {
         // printf("in trx_commit trx_release_locks\n");
         return 0;
@@ -54,6 +55,7 @@ int trx_commit(int trx_id) {
         // printf("in trx_commit pthread_mutex_unlock\n");
         return 0;
     }
+    // printf("trx_table_latch unlocked\n");
     return trx_id;
 }
 int trx_abort(int trx_id) {
@@ -350,7 +352,7 @@ int lock_release(lock_t* lock_obj) {
     // printf("removed from list\n");
 
     // case : releasing first lock of the record
-    if (cnt == 0) {
+    if (cnt == 0 || cnt == 1) {
         // printf("is first\n");
         for (lock_t* l = entry->head; l; l = l->next) {
             // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
