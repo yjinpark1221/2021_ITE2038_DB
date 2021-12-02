@@ -45,7 +45,7 @@ struct trx_entry_t {
     pthread_mutex_t mutex;
     lock_t* head;
     lock_t* tail;
-    std::map<std::pair<table_t, key__t>, std::pair<pagenum_t, std::string> > old_vals;
+    std::map<std::pair<table_t, key__t>, std::vector<std::pair<key__t, std::string> > > old_vals;
     trx_entry_t(int trx_id) : trx_id(trx_id), head(NULL), tail(NULL) {
         pthread_mutex_init(&mutex, NULL);
     }
@@ -56,6 +56,8 @@ struct trx_entry_t {
 
 extern std::map<int, trx_entry_t> trx_table;
 extern std::unordered_map<std::pair<table_t, key__t>, lock_entry_t, hash_t> lock_table;
+extern pthread_mutex_t trx_table_latch;
+extern pthread_mutex_t lock_table_latch;
 
 
 

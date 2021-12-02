@@ -40,11 +40,11 @@ int trx_begin(void) {
 // been used in your lock manager. (Shrinking phase of strict 2PL)
 // • Return the completed transaction id if success, otherwise return 0.
 int trx_commit(int trx_id) {
-    // printf("%s\n", __func__);
     if (pthread_mutex_lock(&trx_table_latch)) {
         // printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
+    printf("[THREAD %d] %s\n", trx_id, __func__);
     // printf("trx_table_latch caught\n");
     if (trx_release_locks(trx_id)) {
         // printf("in trx_commit trx_release_locks\n");
@@ -63,6 +63,7 @@ int trx_abort(int trx_id) {
         // printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
+    printf("[THREAD %d] %s\n", trx_id, __func__);
     trx_undo(trx_id);
     trx_release_locks(trx_id);
     trx_table.erase(trx_id);
@@ -74,13 +75,13 @@ int trx_abort(int trx_id) {
     return 1;
 }
 int trx_undo(int trx_id) {
-    // printf("%s\n", __func__);
+    printf("%s\n", __func__);
     auto& entry = trx_table[trx_id];
     for (auto old : entry.old_vals) {
         table_t table_id = old.first.first;
         key__t key = old.first.second;
-        pagenum_t pn = old.second.first;
-        std::string value = old.second.second;
+        pagenum_t pn = old.second[0].first;
+        std::string value = old.second[0].second;
 
         page_t page;
         ctrl_t* ctrl = buf_read_page(table_id, pn);
@@ -90,6 +91,7 @@ int trx_undo(int trx_id) {
 
         page = leaf;
         buf_write_page(table_id, pn, &page);
+        printf("trx_undo table %d, page %d, key %d, value %s\n", table_id, pn, key, value);
         pthread_mutex_unlock(&(ctrl->mutex));
     }
     return 0;

@@ -96,7 +96,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     if (iter != leaf.slots.end() && iter->key == key) { // success
         if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 0);
         if (trx_id && lock_acquire(table_id, pn, key, trx_id, 0) == NULL) { // deadlock -> abort
-            printf("begin trx_abort\n");
+            if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
             return 1;
         }
@@ -137,7 +137,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     if (iter != leaf.slots.end() && iter->key == key) { // key found
         if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 1);
         if (lock_acquire(table_id, pn, key, trx_id, 1) == NULL) { // deadlock -> abort
-            printf("begin trx_abort\n");
+            if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
             return 1;
         }
@@ -148,14 +148,10 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         // // // print("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
         
         int idx = iter - leaf.slots.begin();
-        // // // print("idx %d\n", idx);
-        // if (trx_table[trx_id].old_vals.find({table_id, key}) == trx_table[trx_id].old_vals.end()) trx_table[trx_id].old_vals[{table_id, key}] = {pn, leaf.values[idx]};
-        // std::string old_value = leaf.values[idx];
-        // std::string new_value = "";
-        // for (int i = 0; i < new_val_size; ++i) {
-        //     new_value.push_back(values[i]);
-        // }
-        // old_value.replace(old_value.begin(), old_value.begin() + new_val_size, new_value);
+        std::string log_value = leaf.values[idx];
+        pthread_mutex_lock(&trx_table_latch);
+        trx_table[trx_id].old_vals[{table_id, key}].push_back({pn, log_value});
+        pthread_mutex_unlock(&trx_table_latch);
         auto& old_value = leaf.values[idx];
         for (int i = 0; i < new_val_size; ++i) {
             old_value[i] = values[i];
