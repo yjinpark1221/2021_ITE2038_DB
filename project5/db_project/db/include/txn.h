@@ -55,7 +55,7 @@ struct trx_entry_t {
     }
 };
 
-extern std::map<int, trx_entry_t> trx_table;
+extern std::unordered_map<int, trx_entry_t> trx_table;
 extern std::unordered_map<std::pair<table_t, key__t>, lock_entry_t, hash_t> lock_table;
 extern pthread_mutex_t trx_table_latch;
 extern pthread_mutex_t lock_table_latch;
@@ -66,6 +66,7 @@ int init_lock_table();
 lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode);
 int lock_release(lock_t* lock_obj, int mode = 0);
 bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode);
+bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode);
 bool trx_init_table();
 int trx_begin(void);
 int trx_commit(int trx_id);
