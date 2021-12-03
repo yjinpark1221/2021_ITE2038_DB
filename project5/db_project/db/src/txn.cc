@@ -107,14 +107,16 @@ int trx_release_locks(int trx_id) {
     lock_t* lock = trx_table[trx_id].head;
     assert(lock);
     lock_t* next = lock->trx_next;
+    pthread_mutex_lock(&lock_table_latch);
     for (; lock; lock = next) {
         // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
         next = lock->trx_next;
-        if (lock_release(lock)) {
+        if (lock_release(lock, 1)) {
             // printf("lock release 1\n");
             return 1;
         }
     }
+    pthread_mutex_unlock(&lock_table_latch);
     return 0;
 }
 
@@ -310,11 +312,13 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
 // • Remove the lock_obj from the lock list.
 // • If there is a successor’s lock waiting for the thread releasing the lock, wake up the successor.
 // • If success, return 0. Otherwise, return non-zero value.
-int lock_release(lock_t* lock_obj) {
+int lock_release(lock_t* lock_obj, int mode) {
     // printf("%s\n", __func__);
-    if (pthread_mutex_lock(&lock_table_latch)) {
-        // printf("in lock_release pthread_mutex_lock nonzero return value");
-        return 1;
+    if (mode == 0) {
+        if (pthread_mutex_lock(&lock_table_latch)) {
+            // printf("in lock_release pthread_mutex_lock nonzero return value");
+            return 1;
+        }
     }
     // printf("lock_latch_caught\n");
     lock_entry_t* entry = lock_obj->sentinel;
@@ -396,9 +400,11 @@ int lock_release(lock_t* lock_obj) {
 
     // printf("free lock\n");
     free(lock_obj);
-    if (pthread_mutex_unlock(&lock_table_latch)) {
-        // printf("in lock_release pthread_mutex_unlock nonzero return value");
-        return 1;
+    if (mode == 0) {
+        if (pthread_mutex_unlock(&lock_table_latch)) {
+            // printf("in lock_release pthread_mutex_unlock nonzero return value");
+            return 1;
+        }
     }
     return 0;
 }
