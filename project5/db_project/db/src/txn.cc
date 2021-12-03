@@ -26,8 +26,10 @@ int trx_begin(void) {
         return 0;
     }
     static int transaction_id = 1;
+    printf("[THREAD %d] trx_begin latch lock\n", transaction_id);
     trx_entry_t entry(transaction_id);
     trx_table[transaction_id] = entry;
+    printf("[THREAD %d] trx_begin latch unlock\n", transaction_id);
     int ret = transaction_id++;
     if (pthread_mutex_unlock(&trx_table_latch)) {
         // printf("in trx_begin pthread_mutex_unlock\n");
@@ -44,18 +46,17 @@ int trx_commit(int trx_id) {
         // printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
-    printf("[THREAD %d] %s\n", trx_id, __func__);
-    // printf("trx_table_latch caught\n");
+    printf("[THREAD %d] trx_commit latch lock\n", trx_id);
     if (trx_release_locks(trx_id)) {
         // printf("in trx_commit trx_release_locks\n");
         return 0;
     }
     trx_table.erase(trx_id);
+    printf("[THREAD %d] trx_commit latch unlock\n", trx_id);
     if (pthread_mutex_unlock(&trx_table_latch)) {
         // printf("in trx_commit pthread_mutex_unlock\n");
         return 0;
     }
-    // printf("trx_table_latch unlocked\n");
     return trx_id;
 }
 int trx_abort(int trx_id) {
@@ -63,13 +64,12 @@ int trx_abort(int trx_id) {
         // printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
-    printf("[THREAD %d] %s\n", trx_id, __func__);
-    pthread_mutex_unlock(&trx_table_latch);
+    printf("[THREAD %d] trx_abort latch lock\n", trx_id);
     trx_undo(trx_id);
-    pthread_mutex_lock(&trx_table_latch);
     trx_release_locks(trx_id);
     trx_table.erase(trx_id);
     // printf("deadlock\n");
+    printf("[THREAD %d] trx_abort latch unlock\n", trx_id);
     if (pthread_mutex_unlock(&trx_table_latch)) {
         // printf("in trx_commit pthread_mutex_unlock\n");
         return 0;
@@ -79,7 +79,7 @@ int trx_abort(int trx_id) {
 int trx_undo(int trx_id) {
     printf("[THREAD %d] %s\n", trx_id, __func__);
     auto& entry = trx_table[trx_id];
-    printf("entry log size %d\n", entry.old_vals.size());
+    // printf("entry log size %d\n", entry.old_vals.size());
     for (auto old : entry.old_vals) {
         table_t table_id = old.first.first;
         key__t key = old.first.second;
@@ -87,16 +87,16 @@ int trx_undo(int trx_id) {
         std::string value = old.second[0].second;
 
         page_t page;
-        printf("buf_read_page start\n");
+        // printf("buf_read_page start\n");
         ctrl_t* ctrl = buf_read_page(table_id, pn);
-        printf("buf_read_page end\n");
+        // printf("buf_read_page end\n");
         mleaf_t leaf = *(ctrl->frame);
         auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
         leaf.values[iter - leaf.slots.begin()] = value;
 
         page = leaf;
         buf_write_page(table_id, pn, &page);
-        printf("table %d, page %d, key %d, value %s\n", table_id, pn, key, value.c_str());
+        // printf("table %d, page %d, key %d, value %s\n", table_id, pn, key, value.c_str());
         pthread_mutex_unlock(&(ctrl->mutex));
     }
     return 0;
@@ -404,7 +404,6 @@ int lock_release(lock_t* lock_obj) {
 }
 
 bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) {
-    // printf("%s\n", __func__);
     std::set<lock_t*> st;
     std::queue<lock_t*> q;
     auto& entry = lock_table[{table_id, pn}];
@@ -416,12 +415,9 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
         }
     }
     for (; !q.empty();) {
-        // printf("[Thread %d] queue size %d\n", trx_id, q.size());
         lock_t* fr = q.front();
         q.pop();
         if (fr->trx_id == trx_id) {
-            // printf("lock_t* u trx_id %d, lock_mode %d, record_id %d\n", fr->trx_id, fr->lock_mode, fr->record_id);
-            // printf("deadlock\n");
             return 1;
         }
         for (lock_t* l = fr->prev; l; l = l->prev) {
@@ -435,7 +431,6 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
             q.push(fr->trx_next);
         }
     }
-    // printf("returning 0\n");
     return 0;
 }
 

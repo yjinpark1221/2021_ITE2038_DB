@@ -97,9 +97,9 @@ void buf_free_page(table_t table_id, pagenum_t pagenum) {
 }
 
 ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
-    printf("%s %d %d\n", __func__, table_id, pagenum);
+    // printf("%s %d %d\n", __func__, table_id, pagenum);
     pthread_mutex_lock(&buf_latch);
-    printf("buf latch caught\n");
+    // printf("buf latch caught\n");
     // reading header page -> must be in hcontrol block
     if (pagenum == 0) {
         for (int i = 0; i < openedFds.size(); ++i) {
@@ -135,7 +135,7 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     // page latch
     pthread_mutex_unlock(&buf_latch);
     pthread_mutex_lock(&(ct->mutex));
-    printf("page latch caught\n");
+    // printf("page latch caught\n");
     //printf("returning buf_read_page\n");
     return ct;
 }
