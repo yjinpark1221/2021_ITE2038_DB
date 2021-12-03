@@ -68,7 +68,6 @@ int trx_abort(int trx_id) {
     trx_undo(trx_id);
     trx_release_locks(trx_id);
     trx_table.erase(trx_id);
-    // printf("deadlock\n");
     printf("[THREAD %d] trx_abort latch unlock\n", trx_id);
     if (pthread_mutex_unlock(&trx_table_latch)) {
         // printf("in trx_commit pthread_mutex_unlock\n");
@@ -92,11 +91,12 @@ int trx_undo(int trx_id) {
         // printf("buf_read_page end\n");
         mleaf_t leaf = *(ctrl->frame);
         auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
+        assert(iter->key == key);
         leaf.values[iter - leaf.slots.begin()] = value;
 
         page = leaf;
         buf_write_page(table_id, pn, &page);
-        // printf("table %d, page %d, key %d, value %s\n", table_id, pn, key, value.c_str());
+        printf("rolling back table %d, page %d, key %d, value %s\n", table_id, pn, key, value.c_str());
         pthread_mutex_unlock(&(ctrl->mutex));
     }
     return 0;
@@ -325,9 +325,6 @@ int lock_release(lock_t* lock_obj, int mode) {
     assert(entry);
     int cnt = 0;
 
-    // ??????????? S1 -> S2 -> X1 있는데 S2 release하면 X1 signal보내야하는거 아닌가
-    
-    // find the first lock of the record -> flag
     for (lock_t* l = entry->head; l; l = l->next) {
         if (l->record_id == lock_obj->record_id) {
             ++cnt;
