@@ -135,26 +135,19 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum, int trx_id ) {
         move_to_tail(ct);
     }
 
-    // page latch
     // printf("[THREAD %d] buf_read_page trylock page %d mutex\n", trx_id,  pagenum);
     pthread_mutex_lock(&(ct->mutex));
     // printf("[THREAD %d] buf_read_page lock page %d mutex\n", trx_id, pagenum);
     // printf("[THREAD %d] buf_read_page unlock buflatch\n", trx_id );
     pthread_mutex_unlock(&buf_latch);
-    // printf("page latch caught\n");
-    //printf("returning buf_read_page\n");
     return ct;
 }
 
+// TODO : ctrl_t** argument
 void buf_write_page(const page_t* src, ctrl_t* ctrl) {
     table_t table_id = ctrl->tp.first;
     pagenum_t pagenum = ctrl->tp.second;
     
-    // printf("%s\n", __func__);
-    // HERE
-
-    // if (ctrl == NULL) pthread_mutex_lock(&buf_latch);
-    // printf("in write buf_latch locked\n");
     if (pagenum == 0) {
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
@@ -181,19 +174,14 @@ void buf_write_page(const page_t* src, ctrl_t* ctrl) {
     memcpy(ct->frame, src, PAGE_SIZE);
     move_to_tail(ct);
     ct->is_dirty = 1;
-    // pthread_mutex_unlock(&buf_latch);
-
-    // ctrl을 다시 안 쓸거니까 이중포인터... ㅇㅋㅇㅋ 
     return;
 }
 
 ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
-    //printf("%s\n", __func__);
     // case : buffer not full 
     // -> no need to flush 
     // -> control[end] = {table_id, pagenum}
     if (cur_buf < num_buf) {
-        // //printf("cur_buf %d\n", cur_buf);
         control[cur_buf].tp = {table_id, pagenum};
         control[cur_buf].is_dirty = 0;
         control[cur_buf].frame = cache + cur_buf;
@@ -208,7 +196,6 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
     }
     ctrl_t* ct;
     for (ct = head.next; ; ct = ct->next) {
-        //printf("cur %d\n", count);
         if (ct == &tail) ct = head.next;
         if (pthread_mutex_trylock(&(ct->mutex)) == EBUSY) continue;
         else {

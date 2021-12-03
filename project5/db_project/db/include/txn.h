@@ -46,6 +46,7 @@ struct trx_entry_t {
     lock_t* head;
     lock_t* tail;
     std::map<std::pair<table_t, key__t>, std::vector<std::pair<key__t, std::string> > > old_vals;
+    std::vector<int> wait_edges;
     trx_entry_t(int trx_id) : trx_id(trx_id), head(NULL), tail(NULL) {
         pthread_mutex_init(&mutex, NULL);
     }

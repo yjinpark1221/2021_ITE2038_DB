@@ -436,6 +436,9 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
     return 0;
 }
 
+// lock_acquire 에서
+//    S lock인 경우: 첫 X lock의 id "만" 엣지에 더함
+//    X lock인 경우: 첫 X lock의 id "까지" 엣지에 더함
 void push_back_lock(lock_t* lock) {
     lock_entry_t* lentry = lock->sentinel;
     trx_entry_t* tentry = &(trx_table[lock->trx_id]);
@@ -484,5 +487,18 @@ void push_back_lock(lock_t* lock) {
         last->trx_next = lock;
         lock->trx_next = NULL;
         tentry->tail = lock;
+    }
+
+    if (lock->lock_mode == SHARED) {
+        lock_t* l = lentry->tail;
+        for (; l && l->lock_mode == SHARED; l = l->prev); 
+        if (l) tentry->wait_edges.push_back(l->trx_id);
+    }
+    else {
+        lock_t* l = lentry->tail;
+        for (; l; l = l->prev){
+            tentry->wait_edges.push_back(l->trx_id);
+            if (l->lock_mode == EXCLUSIVE) break;
+        }
     }
 }
