@@ -98,6 +98,8 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
         if (trx_id && lock_acquire(table_id, pn, key, trx_id, 0) == NULL) { // deadlock -> abort
             if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
+            memset(ret_val, 0, 112);
+            *val_size = 0;
             return 1;
         }
         // if (trx_id) printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 0);
@@ -112,7 +114,6 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     else { // fail
         ret_val[0] = 0;
         *val_size = 0;
-        //// // print("fail\n");
         return 1;
     }
 }
@@ -139,6 +140,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         if (lock_acquire(table_id, pn, key, trx_id, 1) == NULL) { // deadlock -> abort
             if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
+            *old_val_size = 0;
             return 1;
         }
         // printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
@@ -159,16 +161,15 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         page = leaf;
         buf_write_page(table_id, pn, &page);
         pthread_mutex_unlock(&(ctrl->mutex));
-        //// // print("page latch unlocked\n");
+
         pthread_mutex_lock(&trx_table_latch);
         trx_table[trx_id].old_vals[{table_id, key}].push_back({pn, log_value});
         pthread_mutex_unlock(&trx_table_latch);
         return 0; 
     }
     else {
-        //// // print("not found\n");
         pthread_mutex_unlock(&(ctrl->mutex));
-        //// // print("page latch unlocked\n");
+        *old_val_size = 0;
         return 1; // key not found
     }
 }
