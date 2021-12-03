@@ -29,8 +29,8 @@ table_t buf_open_table_file(const char* pathname);
 void buf_close_table_file();
 ctrl_t* buf_alloc_page(table_t table_id);
 void buf_free_page(table_t table_id, pagenum_t pagenum);
-ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum);
-void buf_write_page(table_t table_id, pagenum_t pagenum, const page_t* src);
+ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum, int trx_id = 0);
+void buf_write_page(const page_t* src, ctrl_t* ctrl);
 
 void flush(ctrl_t* pc);
 ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum);

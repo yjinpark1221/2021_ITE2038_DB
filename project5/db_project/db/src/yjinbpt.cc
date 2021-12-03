@@ -87,14 +87,14 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
         return 1;
     }
 
-    ctrl_t* ctrl = buf_read_page(table_id, pn);
+    ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
     leaf = *(ctrl->frame);
     pthread_mutex_unlock(&(ctrl->mutex));
     // printf("leaf page latch unlocked\n");
 
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
-        // if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 0);
+        if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 0);
         if (trx_id && lock_acquire(table_id, pn, key, trx_id, 0) == NULL) { // deadlock -> abort
             if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
@@ -102,7 +102,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
             *val_size = 0;
             return 1;
         }
-        // if (trx_id) printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 0);
+        if (trx_id) printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 0);
         i = iter - leaf.slots.begin();
         for (int j = 0; j < leaf.slots[i].size; ++j) {
             ret_val[j] = leaf.values[i][j];
@@ -130,24 +130,24 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     pagenum_t pn = find_leaf_page(table_id, key);
     // printf("leaf page number %d\n", pn);
     page_t page;
-    ctrl_t* ctrl = buf_read_page(table_id, pn);
+    ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
     mleaf_t leaf = *(ctrl->frame);
     // printf("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
     pthread_mutex_unlock(&ctrl->mutex);
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
-        // if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 1);
+        if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 1);
         if (lock_acquire(table_id, pn, key, trx_id, 1) == NULL) { // deadlock -> abort
             if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
             *old_val_size = 0;
             return 1;
         }
-        // printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
-        ctrl = buf_read_page(table_id, pn);
+        printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
+        ctrl = buf_read_page(table_id, pn, trx_id);
+        // printf("[THREAD %d] key %d buf_read_page done\n", trx_id, key);
         leaf = *(ctrl->frame);
         iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
-        // // // print("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
         
         int idx = iter - leaf.slots.begin();
         std::string log_value = leaf.values[idx];
@@ -159,12 +159,11 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         assert(*old_val_size == new_val_size);
         
         page = leaf;
-        buf_write_page(table_id, pn, &page);
+        buf_write_page(&page, ctrl);
         pthread_mutex_unlock(&(ctrl->mutex));
+        // printf("[THREAD %d] key %d page latch unlock\n", trx_id, key);
 
-        pthread_mutex_lock(&trx_table_latch);
         trx_table[trx_id].old_vals[{table_id, key}].push_back({pn, log_value});
-        pthread_mutex_unlock(&trx_table_latch);
         return 0; 
     }
     else {
@@ -318,7 +317,7 @@ pagenum_t insert_into_leaf(table_t fd, pagenum_t pn, key__t key, std::string val
     leaf.num_keys++;
     adjust(leaf);
     page_t leaf_page = leaf;
-    buf_write_page(fd, pn, &leaf_page);
+    buf_write_page(&leaf_page, ctrl_leaf);
     pthread_mutex_unlock(&(ctrl_leaf->mutex));
     return 0;
 }
@@ -377,11 +376,11 @@ pagenum_t insert_into_leaf_after_splitting(table_t fd, pagenum_t pn, key__t key,
     adjust(new_leaf);
 
     page = leaf;
-    buf_write_page(fd, pn, &page);
+    buf_write_page(&page, ctrl_pn);
     pthread_mutex_unlock(&(ctrl_pn->mutex));
 
     new_page = new_leaf;
-    buf_write_page(fd, new_pn, &new_page);
+    buf_write_page(&new_page, ctrl_new);
     pthread_mutex_unlock(&(ctrl_new->mutex));
    
     /* Case : insert into original leaf
@@ -429,7 +428,7 @@ pagenum_t insert_into_node(table_t fd, pagenum_t pn, pagenum_t new_pn,
     ++parent.num_keys;
 
     page = parent;
-    buf_write_page(fd, parent_pn, &page);
+    buf_write_page(&page, ctrl);
     pthread_mutex_unlock(&(ctrl->mutex));
 
     return 0;
@@ -487,11 +486,11 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
     }
 
     page = internal;
-    buf_write_page(fd, parent_pn, &page);
+    buf_write_page(&page, ctrl_parent);
     pthread_mutex_unlock(&(ctrl_parent->mutex));
     
     page = new_internal;
-    buf_write_page(fd, new_internal_pn, &page);
+    buf_write_page(&page, ctrl_new);
     pthread_mutex_unlock(&(ctrl_new->mutex));
 
     /* Change the parent page number of children of new page
@@ -500,7 +499,7 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
     ctrl_t* ctrl_child = buf_read_page(fd, child_pn);
     page = *(ctrl_child->frame);
     ((pagenum_t*)(page.a))[0] = new_internal_pn;
-    buf_write_page(fd, child_pn, &page);
+    buf_write_page(&page, ctrl_child);
     pthread_mutex_unlock(&(ctrl_child->mutex));
 
     for (int i = 0; i < new_internal.num_keys; ++i) {
@@ -508,7 +507,7 @@ pagenum_t insert_into_node_after_splitting(table_t fd, pagenum_t pn, pagenum_t n
         ctrl_t* ctrl_child = buf_read_page(fd, child_pn);
         page = *(ctrl_child->frame);
         ((pagenum_t*)(page.a))[0] = new_internal_pn;
-        buf_write_page(fd, child_pn, &page);
+        buf_write_page(&page, ctrl_child);
         pthread_mutex_unlock(&(ctrl_child->mutex));
     }
 
@@ -592,19 +591,19 @@ pagenum_t insert_into_new_root(table_t fd, pagenum_t pn, pagenum_t new_pn, key__
     }
 
     root_page = root;
-    buf_write_page(fd, pn, &page);
+    buf_write_page(&page, ctrl_pn);
     pthread_mutex_unlock(&(ctrl_pn->mutex));
 
-    buf_write_page(fd, new_pn, &new_page);
+    buf_write_page(&new_page, ctrl_new);
     pthread_mutex_unlock(&(ctrl_new->mutex));
 
-    buf_write_page(fd, root_pn, &root_page);
+    buf_write_page(&root_page, ctrl_root);
     pthread_mutex_unlock(&(ctrl_root->mutex));
 
     ctrl_t* ctrl_header = buf_read_page(fd, 0);
     page_t header_page = *(ctrl_header->frame);
     ((pagenum_t*)header_page.a)[2] = root_pn;
-    buf_write_page(fd, 0, &header_page);
+    buf_write_page(&header_page, ctrl_header);
     pthread_mutex_unlock(&(ctrl_header->mutex));
     return 0;
 }
@@ -618,13 +617,13 @@ pagenum_t start_new_tree(table_t fd, key__t key, std::string value) {
     pagenum_t pn = ctrl->tp.second;
     mleaf_t leaf(key, value);
     page_t page = leaf;
-    buf_write_page(fd, pn, &page);     // root
+    buf_write_page(&page, ctrl);     // root
     pthread_mutex_unlock(&(ctrl->mutex));
 
     ctrl_t* ctrl_header = buf_read_page(fd, 0);
     page = *(ctrl_header->frame);
     ((pagenum_t*)page.a)[2] = pn;
-    buf_write_page(fd, 0, &page);      // header
+    buf_write_page(&page, ctrl_header);      // header
     pthread_mutex_unlock(&(ctrl_header->mutex));
     return 0;
 }
@@ -689,7 +688,7 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
         --leaf.num_keys;
         adjust(leaf); // adjust offset and free_space
         page = leaf;
-        buf_write_page(fd, pn, &page);
+        buf_write_page(&page, ctrl);
         pthread_mutex_unlock(&(ctrl->mutex));
     }
     else {
@@ -709,7 +708,7 @@ void remove_entry_from_node(table_t fd, pagenum_t pn, key__t key) {
 
         --internal.num_keys;
         page = internal;
-        buf_write_page(fd, pn, &page);
+        buf_write_page(&page, ctrl);
         pthread_mutex_unlock(&(ctrl->mutex));
     }
 }
@@ -747,7 +746,7 @@ int adjust_root(table_t fd, pagenum_t pn) {
         ctrl_t* ctrl_new = buf_read_page(fd, new_root_pn);
         page = *(ctrl_new->frame);
         ((pagenum_t*)page.a)[0] = 0;
-        buf_write_page(fd, new_root_pn, &page);
+        buf_write_page(&page, ctrl_new);
         pthread_mutex_unlock(&(ctrl_new->mutex));
     }
 
@@ -757,7 +756,7 @@ int adjust_root(table_t fd, pagenum_t pn) {
     ctrl_t* ctrl_header = buf_read_page(fd, 0);
     page = *(ctrl_header->frame);
     ((pagenum_t*)page.a)[2] = new_root_pn;
-    buf_write_page(fd, 0, &page);
+    buf_write_page(&page, ctrl_header);
     pthread_mutex_unlock(&(ctrl_header->mutex));
 
     return 0;
@@ -809,7 +808,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         neighbor_internal.num_keys += internal.num_keys + 1;
         neighbor_page = neighbor_internal;
 
-        buf_write_page(fd, neighbor_pn, &neighbor_page);
+        buf_write_page(&neighbor_page, ctrl_neighbor);
         pthread_mutex_unlock(&(ctrl_neighbor->mutex));
 
         /* All children must now point up to the same parent.
@@ -819,7 +818,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
             ctrl_t* ctrl_child = buf_read_page(fd, child_pn);
             page_t child_page = *(ctrl_child->frame);
             ((pagenum_t*)child_page.a)[0] = neighbor_pn;
-            buf_write_page(fd, child_pn, &child_page);
+            buf_write_page(&child_page, ctrl_child);
             pthread_mutex_unlock(&(ctrl_child->mutex));
         }
     }
@@ -840,7 +839,7 @@ int coalesce_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int index/*i
         adjust(neighbor_leaf); // adjust offset and free_space
         neighbor_page = neighbor_leaf;
 
-        buf_write_page(fd, neighbor_pn, &neighbor_page);
+        buf_write_page(&neighbor_page, ctrl_neighbor);
         pthread_mutex_unlock(&(ctrl_neighbor->mutex));
     }
     buf_free_page(fd, pn);
@@ -885,7 +884,7 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             minternal_t parent = *(ctrl_parent->frame);
             parent.keys[k_prime_index] = neighbor_leaf.slots[0].key;
             parent_page = parent;
-            buf_write_page(fd, leaf.parent, &parent_page);
+            buf_write_page(&parent_page, ctrl_parent);
             pthread_mutex_unlock(&(ctrl_parent->mutex));
 
             page = leaf;
@@ -901,7 +900,7 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             minternal_t parent = *(ctrl_parent->frame);
             parent.keys[k_prime_index] = neighbor_internal.keys[0];
             parent_page = parent;
-            buf_write_page(fd, internal.parent, &parent_page);
+            buf_write_page(&parent_page, ctrl_parent);
             pthread_mutex_unlock(&(ctrl_parent->mutex));
 
             neighbor_internal.first_child = neighbor_internal.children[0];
@@ -915,7 +914,7 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             ctrl_t* ctrl_child = buf_read_page(fd, child);
             page_t child_page = *(ctrl_child->frame);
             ((pagenum_t*)child_page.a)[0] = pn;
-            buf_write_page(fd, child, &child_page);
+            buf_write_page(&child_page, ctrl_child);
             pthread_mutex_unlock(&(ctrl_child->mutex));
 
             page = internal;
@@ -944,7 +943,7 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             minternal_t parent = *(ctrl_parent->frame);
             parent.keys[k_prime_index] = leaf.slots[0].key;
             parent_page = parent;
-            buf_write_page(fd, leaf.parent, &parent_page);
+            buf_write_page(&parent_page, ctrl_parent);
             pthread_mutex_unlock(&(ctrl_parent->mutex));
 
             page = leaf;
@@ -961,7 +960,7 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             minternal_t parent = parent_page;
             parent.keys[k_prime_index] = neighbor_internal.keys[neighbor_internal.num_keys - 1];
             parent_page = parent;
-            buf_write_page(fd, internal.parent, &parent_page);
+            buf_write_page(&parent_page, ctrl_parent);
             pthread_mutex_unlock(&(ctrl_parent->mutex));
 
             neighbor_internal.keys.pop_back();
@@ -973,17 +972,17 @@ int redistribute_nodes(table_t fd, pagenum_t pn, pagenum_t neighbor_pn, int inde
             ctrl_t* ctrl_child = buf_read_page(fd, child);
             page_t child_page = *(ctrl_child->frame);
             ((pagenum_t*)child_page.a)[0] = pn;
-            buf_write_page(fd, child, &child_page);
+            buf_write_page(&child_page, ctrl_child);
             pthread_mutex_unlock(&(ctrl_child->mutex));
 
             page = internal;
             neighbor_page = neighbor_internal;
         }
     }
-    buf_write_page(fd, pn, &page);
+    buf_write_page(&page, ctrl_pn);
     pthread_mutex_unlock(&(ctrl_pn->mutex));
 
-    buf_write_page(fd, neighbor_pn, &neighbor_page);
+    buf_write_page(&neighbor_page, ctrl_neighbor);
     pthread_mutex_unlock(&(ctrl_neighbor->mutex));
     return 0;
 }

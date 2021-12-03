@@ -26,10 +26,10 @@ int trx_begin(void) {
         return 0;
     }
     static int transaction_id = 1;
-    printf("[THREAD %d] trx_begin latch lock\n", transaction_id);
+    // printf("[THREAD %d] trx_begin latch lock\n", transaction_id);
     trx_entry_t entry(transaction_id);
     trx_table[transaction_id] = entry;
-    printf("[THREAD %d] trx_begin latch unlock\n", transaction_id);
+    // printf("[THREAD %d] trx_begin latch unlock\n", transaction_id);
     int ret = transaction_id++;
     if (pthread_mutex_unlock(&trx_table_latch)) {
         // printf("in trx_begin pthread_mutex_unlock\n");
@@ -46,13 +46,12 @@ int trx_commit(int trx_id) {
         // printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
-    printf("[THREAD %d] trx_commit latch lock\n", trx_id);
+    // printf("[THREAD %d] trx_commit latch lock\n", trx_id);
     if (trx_release_locks(trx_id)) {
         // printf("in trx_commit trx_release_locks\n");
         return 0;
     }
-    trx_table.erase(trx_id);
-    printf("[THREAD %d] trx_commit latch unlock\n", trx_id);
+    // printf("[THREAD %d] trx_commit latch unlock\n", trx_id);
     if (pthread_mutex_unlock(&trx_table_latch)) {
         // printf("in trx_commit pthread_mutex_unlock\n");
         return 0;
@@ -64,11 +63,10 @@ int trx_abort(int trx_id) {
         // printf("in trx_commit pthread_mutex_lock\n");
         return 0;
     }
-    printf("[THREAD %d] trx_abort latch lock\n", trx_id);
+    // printf("[THREAD %d] trx_abort latch lock\n", trx_id);
     trx_undo(trx_id);
     trx_release_locks(trx_id);
-    trx_table.erase(trx_id);
-    printf("[THREAD %d] trx_abort latch unlock\n", trx_id);
+    // printf("[THREAD %d] trx_abort latch unlock\n", trx_id);
     if (pthread_mutex_unlock(&trx_table_latch)) {
         // printf("in trx_commit pthread_mutex_unlock\n");
         return 0;
@@ -76,7 +74,7 @@ int trx_abort(int trx_id) {
     return 1;
 }
 int trx_undo(int trx_id) {
-    printf("[THREAD %d] %s\n", trx_id, __func__);
+    // printf("[THREAD %d] %s\n", trx_id, __func__);
     auto& entry = trx_table[trx_id];
     // printf("entry log size %d\n", entry.old_vals.size());
     for (auto old : entry.old_vals) {
@@ -95,8 +93,8 @@ int trx_undo(int trx_id) {
         leaf.values[iter - leaf.slots.begin()] = value;
 
         page = leaf;
-        buf_write_page(table_id, pn, &page);
-        printf("rolling back table %d, page %d, key %d, value %s\n", table_id, pn, key, value.c_str());
+        buf_write_page(&page, ctrl);
+        // printf("rolling back table %d, page %d, key %d, value %s\n", table_id, pn, key, value.c_str());
         pthread_mutex_unlock(&(ctrl->mutex));
     }
     return 0;
@@ -116,6 +114,7 @@ int trx_release_locks(int trx_id) {
             return 1;
         }
     }
+    trx_table.erase(trx_id);
     pthread_mutex_unlock(&lock_table_latch);
     return 0;
 }
@@ -361,15 +360,15 @@ int lock_release(lock_t* lock_obj, int mode) {
             // case : first lock is SHARED
             if (l->lock_mode == SHARED) {
                 int cnt = 0;
-                printf("signal trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
+                // printf("signal trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
                 pthread_cond_signal(&l->condition);
                 for (lock_t* ll = l->next; ll; ll = ll->next) {
-                printf("lock_t* ll trx_id %d, lock_mode %d, record_id %d\n", ll->trx_id, ll->lock_mode, ll->record_id);
+                // printf("lock_t* ll trx_id %d, lock_mode %d, record_id %d\n", ll->trx_id, ll->lock_mode, ll->record_id);
                     if (ll->record_id != lock_obj->record_id) continue;
                     // second~  lock is SHARED
                     if (ll->lock_mode == SHARED) {
                         ++cnt;
-                        printf("signal trx_id %d, lock_mode %d, record_id %d\n", ll->trx_id, ll->lock_mode, ll->record_id);
+                        // printf("signal trx_id %d, lock_mode %d, record_id %d\n", ll->trx_id, ll->lock_mode, ll->record_id);
                         pthread_cond_signal(&ll->condition);
                     }
                     // second~ lock is EXCLUSIVE
@@ -377,7 +376,7 @@ int lock_release(lock_t* lock_obj, int mode) {
                         // case : (first)S1 -> (second)X1
                         // acquire X1 too
                         if (ll->trx_id == l->trx_id && cnt == 0) {
-                            printf("second lock is exclusive\nsignal trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
+                            // printf("second lock is exclusive\nsignal trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
                             pthread_cond_signal(&ll->condition);
                         }
                         break;
@@ -387,7 +386,7 @@ int lock_release(lock_t* lock_obj, int mode) {
             }
             // case : first lock is EXCLUSIVE
             else {
-                printf("signal trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
+                // printf("signal trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
                 pthread_cond_signal(&l->condition);
                 break;
             }

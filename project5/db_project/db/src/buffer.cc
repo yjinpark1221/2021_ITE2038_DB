@@ -96,7 +96,7 @@ void buf_free_page(table_t table_id, pagenum_t pagenum) {
     pthread_mutex_unlock(&buf_latch);
 }
 
-ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
+ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum, int trx_id ) {
     // printf("%s %d %d\n", __func__, table_id, pagenum);
     pthread_mutex_lock(&buf_latch);
     // printf("buf latch caught\n");
@@ -105,8 +105,11 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
             if (hc->tp.first == table_id) {
-                pthread_mutex_unlock(&buf_latch);
+                // printf("buf_read_page trylock pagemutex\n");
+                
                 pthread_mutex_lock(&(hc->mutex));
+                // printf("buf_read_page lock pagemutex\n");
+                pthread_mutex_unlock(&buf_latch);
                 return hc;
             }
         }
@@ -133,18 +136,25 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum) {
     }
 
     // page latch
-    pthread_mutex_unlock(&buf_latch);
+    // printf("[THREAD %d] buf_read_page trylock page %d mutex\n", trx_id,  pagenum);
     pthread_mutex_lock(&(ct->mutex));
+    // printf("[THREAD %d] buf_read_page lock page %d mutex\n", trx_id, pagenum);
+    // printf("[THREAD %d] buf_read_page unlock buflatch\n", trx_id );
+    pthread_mutex_unlock(&buf_latch);
     // printf("page latch caught\n");
     //printf("returning buf_read_page\n");
     return ct;
 }
 
-void buf_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
-    //printf("%s\n", __func__);
+void buf_write_page(const page_t* src, ctrl_t* ctrl) {
+    table_t table_id = ctrl->tp.first;
+    pagenum_t pagenum = ctrl->tp.second;
+    
+    // printf("%s\n", __func__);
     // HERE
-    pthread_mutex_lock(&buf_latch);
-    //printf("in write buf_latch locked\n");
+
+    // if (ctrl == NULL) pthread_mutex_lock(&buf_latch);
+    // printf("in write buf_latch locked\n");
     if (pagenum == 0) {
         for (int i = 0; i < openedFds.size(); ++i) {
             ctrl_t* hc = hcontrol + i;
@@ -171,7 +181,9 @@ void buf_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
     memcpy(ct->frame, src, PAGE_SIZE);
     move_to_tail(ct);
     ct->is_dirty = 1;
-    pthread_mutex_unlock(&buf_latch);
+    // pthread_mutex_unlock(&buf_latch);
+
+    // ctrl을 다시 안 쓸거니까 이중포인터... ㅇㅋㅇㅋ 
     return;
 }
 
