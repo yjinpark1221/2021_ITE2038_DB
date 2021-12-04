@@ -84,7 +84,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     if (pn == 0) { // fail
         ret_val[0] = 0;
         *val_size = 0;
-        return 1;
+        return 0;
     }
 
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
@@ -114,7 +114,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     else { // fail
         ret_val[0] = 0;
         *val_size = 0;
-        return 1;
+        return 0;
     }
 }
 
@@ -169,7 +169,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     else {
         pthread_mutex_unlock(&(ctrl->mutex));
         *old_val_size = 0;
-        return 1; // key not found
+        return 0; // key not found
     }
 }
 
