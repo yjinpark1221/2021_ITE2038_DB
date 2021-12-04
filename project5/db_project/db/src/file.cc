@@ -28,6 +28,7 @@ table_t file_open_table_file(const char* pathname) {
             return fd;
         } // controlled in higher layer
         pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
+        memset(buf, 0, PAGE_SIZE);
         buf[0] = 1; // free page
         buf[1] = 2560; // num page
         buf[2] = 0; // root page
@@ -100,6 +101,7 @@ pagenum_t file_alloc_page(table_t table_id) {
 void file_free_page(table_t table_id, pagenum_t pagenum) {
     int fd = table2fd[table_id];
     pagenum_t* buf = (pagenum_t*)malloc(PAGE_SIZE);
+    memset(buf, 0, PAGE_SIZE);
     if (pread(fd, buf, PAGE_SIZE, 0) <= 0) {
         perror("file_free_page pread error");
         exit(0);
@@ -194,6 +196,7 @@ std::vector<pagenum_t> file_get_free_list(table_t table_id) {
     pagenum_t pagenum = lseek(fd, 0, SEEK_END) / PAGE_SIZE;
     std::vector<pagenum_t> vec;
     pagenum_t* buf = (pagenum_t*) malloc(PAGE_SIZE * pagenum);
+    memset(buf, 0, PAGE_SIZE);
     pread(fd, buf, PAGE_SIZE * pagenum, 0);
     pagenum_t freePage = buf[0];
     for (; freePage; freePage = buf[PAGE_SIZE / 8 * freePage]) {

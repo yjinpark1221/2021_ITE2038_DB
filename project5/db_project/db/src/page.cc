@@ -8,6 +8,7 @@ page_t::page_t(mleaf_t& leaf) {
         perror("leaf to page_t num_key different");
         exit(0);
     }
+    memset(a, 0, 4096);
     ((pagenum_t*)a)[0 / 8] = leaf.parent;
     ((u32_t*)a)[8 / 4] = 1;
     ((u32_t*)a)[12 / 4] = leaf.num_keys;
@@ -26,6 +27,7 @@ page_t::page_t(minternal_t& node) {
         perror("internal to page_t num_key different");
         exit(0);
     }
+    memset(a, 0, 4096);
     ((pagenum_t*)a)[0 / 8] = node.parent;
     ((u32_t*)a)[8 / 4] = 0;
     ((u32_t*)a)[12 / 4] = node.num_keys;
@@ -91,14 +93,13 @@ mleaf_t::mleaf_t(page_t& page) : mnode_t(page) {
     free_space = ((pagenum_t*)page.a)[112 / 8];
     right_sibling = ((pagenum_t*)page.a)[120 / 8];
     for (u32_t i = 0; i < num_keys; ++i) {
-        mslot_t* slot = new mslot_t((slot_t*)(page.a + 128) + i);
+        mslot_t slot((slot_t*)(page.a + 128) + i);
         std::string val;
-        for (int j = 0; j < slot->size; ++j) {
-            val.push_back(*(page.a + slot->offset + j)); 
+        for (int j = 0; j < slot.size; ++j) {
+            val.push_back(*(page.a + slot.offset + j)); 
         }
-        slots.push_back(*slot);
+        slots.push_back(slot);
         values.push_back(val);
-        free(slot);
     }
 }
 mleaf_t::mleaf_t(pagenum_t p, u32_t i, u32_t n) : mnode_t(p, i, n) {

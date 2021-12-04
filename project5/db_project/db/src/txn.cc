@@ -457,28 +457,27 @@ bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
         }
     }
     // printf("return 0\n");
-    return 1;
+    return 0;
 }
 
+// S1 S2 뒤에 X1 매달 때..
+// 1 -> 1???????? 
 void add_edge(lock_t* lock) {
     lock_entry_t* lentry = lock->sentinel;
     trx_entry_t* tentry = &(trx_table[lock->trx_id]);
 
     if (lock->lock_mode == SHARED) {
         lock_t* l = lentry->tail;
-        // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
         for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
         if (l) {
             tentry->wait_edges.insert(l->trx_id);
-            // printf("push back lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
         }
     }
     else {
         lock_t* l = lentry->tail;
-        // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
         for (; l; l = l->prev) {
             if (l->record_id != lock->record_id) continue;
-            // printf("push back lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
+            if (l->trx_id == lock->trx_id) continue;
             tentry->wait_edges.insert(l->trx_id);
             if (l->lock_mode == EXCLUSIVE) break;
         }
