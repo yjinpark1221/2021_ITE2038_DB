@@ -20,6 +20,9 @@ struct ctrl_t {
     ctrl_t(): is_dirty(0), frame(NULL), next(NULL), prev(NULL) {
         pthread_mutex_init(&mutex, NULL);
     }
+    ~ctrl_t() {
+        pthread_mutex_destroy(&mutex);
+    }
 };
 
 

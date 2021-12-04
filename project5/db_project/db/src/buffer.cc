@@ -26,8 +26,8 @@ int buf_init(int nb) {
 
     num_buf = nb;
     cache = (page_t*) malloc(sizeof(page_t) * num_buf);
-    control = (ctrl_t*) malloc(sizeof(ctrl_t) * num_buf);
-    hcontrol = (ctrl_t*) malloc(sizeof(ctrl_t) * 20);
+    control = new ctrl_t[num_buf];
+    hcontrol = new ctrl_t[20];
     hcache = (page_t*) malloc(sizeof(page_t) * 20);
     
     if (cache == NULL || control == NULL || hcontrol == NULL || hcache == NULL) {
@@ -39,7 +39,7 @@ int buf_init(int nb) {
 }
 
 table_t buf_open_table_file(const char* pathname) {
-    //printf("%s\n", __func__);
+    printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
     table_t table_id = file_open_table_file(pathname);
     page_t hp;
@@ -47,7 +47,10 @@ table_t buf_open_table_file(const char* pathname) {
     hcache[openedFds.size() - 1] = hp;
 
     ctrl_t hc(table_id, 0, hcache + (int)(openedFds.size() - 1));
-    hcontrol[openedFds.size() - 1] = hc;
+    hcontrol[openedFds.size() - 1].tp = {table_id, 0};
+    hcontrol[openedFds.size() - 1].frame = hcache + (int)(openedFds.size() - 1);
+    hcontrol[openedFds.size() - 1].next = hcontrol[openedFds.size() - 1].prev = NULL;
+    hcontrol[openedFds.size() - 1].is_dirty = 0;
     pthread_mutex_unlock(&buf_latch);
     return table_id;
 }
@@ -60,18 +63,18 @@ void buf_close_table_file() {
     for (int i = 0; i < openedFds.size(); ++i) {
         flush(hcontrol + i);
     }
+    delete[] hcontrol;
     // printf("headers flushed\n");
     // flush frames
     for (int i = 0; i < cur_buf; ++i) {
         flush(control + i);
     }
+    delete[] control;
     pthread_mutex_unlock(&buf_latch);
     // printf("other frames flushed\n");
-
+    pthread_mutex_destroy(&buf_latch);
     free(cache);
     free(hcache);
-    free(control);
-    free(hcontrol);
     
     // close files
     file_close_table_file();

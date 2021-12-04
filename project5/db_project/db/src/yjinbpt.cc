@@ -147,7 +147,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
             *old_val_size = 0;
             return -1;
         }
-        // printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
+        //("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
         ctrl = buf_read_page(table_id, pn, trx_id);
         // printf("[THREAD %d] key %d buf_read_page done\n", trx_id, key);
         leaf = *(ctrl->frame);
@@ -212,6 +212,8 @@ int init_db(int num_buf) {
 int shutdown_db() {
     // printf("%s\n", __func__);
     buf_close_table_file();
+    pthread_mutex_destroy(&trx_table_latch);
+    pthread_mutex_destroy(&lock_table_latch);
     return 0;
 }
 

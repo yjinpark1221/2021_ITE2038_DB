@@ -106,7 +106,7 @@ int trx_undo(int trx_id) {
 int trx_release_locks(int trx_id) {
     // printf("%s\n", __func__);
     lock_t* lock = trx_table[trx_id].head;
-    assert(lock);
+    if (lock == 0) return 0;
     lock_t* next = lock->trx_next;
     pthread_mutex_lock(&lock_table_latch);
     for (; lock; lock = next) {
