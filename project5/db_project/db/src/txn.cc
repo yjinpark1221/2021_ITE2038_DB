@@ -64,29 +64,17 @@ int trx_commit(int trx_id) {
     }
     return trx_id;
 }
+
 int trx_abort(int trx_id) {
-    // if (pthread_mutex_lock(&trx_table_latch)) {
-    //     // printf("in trx_commit pthread_mutex_lock\n");
-    //     return 0;
-    // }
-    // printf("[THREAD %d] trx_abort latch lock\n", trx_id);
-    // printf("%d %s trylock trx\n", trx_id, __func__);
     pthread_mutex_lock(&trx_table_latch);
-    // printf("%d %s lock trx\n", trx_id, __func__);
     trx_undo(trx_id);
     trx_release_locks(trx_id);
-    // printf("[THREAD %d] trx_abort latch unlock\n", trx_id);
-    // printf("%d %s unlock trx\n", trx_id, __func__);
-    if (pthread_mutex_unlock(&trx_table_latch)) {
-        // printf("in trx_commit pthread_mutex_unlock\n");
-        return 0;
-    }
+    pthread_mutex_unlock(&trx_table_latch);
     return 1;
 }
+
 int trx_undo(int trx_id) {
-    // printf("[THREAD %d] %s\n", trx_id, __func__);
     auto& entry = trx_table[trx_id];
-    // printf("entry log size %d\n", entry.old_vals.size());
     for (auto iter = entry.logs.rbegin(); iter != entry.logs.rend(); ++iter) {
         table_t table_id = iter->table_id;
         mslot_t slot = iter->slot;
@@ -469,7 +457,7 @@ bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
         }
     }
     // printf("return 0\n");
-    return 0;
+    return 1;
 }
 
 void add_edge(lock_t* lock) {
@@ -496,6 +484,7 @@ void add_edge(lock_t* lock) {
         }
     }
 }
+
 void push_back_lock(lock_t* lock) {
     // printf("%s\n", __func__);
     lock_entry_t* lentry = lock->sentinel;
