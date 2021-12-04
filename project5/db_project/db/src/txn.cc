@@ -2,7 +2,6 @@
 #include "txn.h"
 #endif
 #include <stack>
-
 #include <cassert>
 #include <set>
 pthread_mutex_t trx_table_latch;
@@ -130,6 +129,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     // printf("%s 1\n", __func__);
     pthread_mutex_lock(&lock_table_latch);
     // printf("%s 2\n", __func__);
+    if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, lock_mode);
 
     auto tmp = lock_table.find({table_id, page_id});
     // not in lock table -> insert empty list into table
@@ -154,6 +154,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             // do not need to acquire new lock
             else {
                 // printf("%d %s unlock trx\n", trx_id, __func__);
+                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
                 pthread_mutex_unlock(&trx_table_latch);
                 // printf("this txn(%d) has s or x lock\n", trx_id);
                 pthread_mutex_unlock(&lock_table_latch);
@@ -189,6 +190,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
                     // printf("the only lock -> upgrade\n");
                     l->lock_mode = EXCLUSIVE;
                     // printf("%d %s unlock trx\n", trx_id, __func__);
+                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
                     pthread_mutex_unlock(&trx_table_latch);
                     pthread_mutex_unlock(&lock_table_latch);
                     return l;
@@ -204,8 +206,9 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
 
                 add_edge(lock);
                 push_back_lock(lock);
-                if (bfs(table_id, page_id, key, trx_id, lock_mode)) {
+                if (dfs(table_id, page_id, key, trx_id, lock_mode)) {
                     // printf("%d %s unlock trx\n", trx_id, __func__);
+                ("[THREAD %d] key %d aborting lock mode %d\n", trx_id, key, lock_mode);
                     pthread_mutex_unlock(&trx_table_latch);
                     pthread_mutex_unlock(&lock_table_latch);
                     return NULL;
@@ -221,6 +224,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
                     // printf("in lock_acquire pthread_cond_wait nonzero return value");
                     return NULL;
                 }
+                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
                 // printf("%d %s unlock trx\n", trx_id, __func__);
                 pthread_mutex_unlock(&lock_table_latch);
                 return lock;
@@ -229,6 +233,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             // do not need to acquire new lock
             else {
                 // printf("%d %s unlock trx\n", trx_id, __func__);
+                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
                 pthread_mutex_unlock(&trx_table_latch);
                 pthread_mutex_unlock(&lock_table_latch);
                 return l;
@@ -257,8 +262,9 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
         // case : deadlock
         add_edge(lock);
         push_back_lock(lock);
-        if (bfs(table_id, page_id, key, trx_id, lock_mode)) {
+        if (dfs(table_id, page_id, key, trx_id, lock_mode)) {
             // printf("%d %s unlock trx\n", trx_id, __func__);
+                ("[THREAD %d] key %d aborting lock mode %d\n", trx_id, key, lock_mode);
             pthread_mutex_unlock(&trx_table_latch);
             pthread_mutex_unlock(&lock_table_latch);
             return NULL;
@@ -274,6 +280,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
             // printf("in lock_acquire pthread_cond_wait nonzero return value");
             return NULL;
         }
+                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
         pthread_mutex_unlock(&lock_table_latch);
         // printf("returning lock\n");
         return lock;
@@ -289,6 +296,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     }
 
     // printf("%d %s unlock trx\n", trx_id, __func__);
+                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
     pthread_mutex_unlock(&trx_table_latch);
     pthread_mutex_unlock(&lock_table_latch);
     // printf("returning lock\n");
@@ -423,9 +431,9 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
     return 0;
 }
 
-bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) {
+bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) {
     // printf("%s %d\n", __func__, trx_id);
-    std::queue<std::pair<int, int> > q;
+    std::stack<std::pair<int, int> > q;
     std::set<int> visited;
     visited.insert(trx_id);
 
@@ -435,7 +443,7 @@ bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
 
     for (; !q.empty();) {
         // printf("%d q.size() %d\n", trx_id, q.size());
-        auto fr = q.front();
+        auto fr = q.top();
         q.pop();
         // a is waiting for **b**
         int a = fr.first;

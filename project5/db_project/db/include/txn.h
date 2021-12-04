@@ -73,7 +73,7 @@ int init_lock_table();
 lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode);
 int lock_release(lock_t* lock_obj, int mode = 0);
 bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode);
-bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode);
+bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode);
 bool trx_init_table();
 int trx_begin(void);
 int trx_commit(int trx_id);
