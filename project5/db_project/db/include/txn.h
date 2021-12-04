@@ -70,9 +70,9 @@ extern pthread_mutex_t lock_table_latch;
 
 
 int init_lock_table();
-lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode);
+lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode, int* ret_slock, int* ret_xlock);
+lock_t* trx_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode, lock_t* lock, int has_slock, int has_xlock);
 int lock_release(lock_t* lock_obj, int mode = 0);
-bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode);
 bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode);
 bool trx_init_table();
 int trx_begin(void);
@@ -80,6 +80,7 @@ int trx_commit(int trx_id);
 int trx_abort(int trx_id);
 int trx_undo(int trx_id);
 int trx_release_locks(int trx_id);
-void push_back_lock(lock_t*);
+void lock_push_back(lock_t*);
+void trx_push_back(lock_t*);
 void add_edge(lock_t*);
 #endif /* __TXN_H__ */

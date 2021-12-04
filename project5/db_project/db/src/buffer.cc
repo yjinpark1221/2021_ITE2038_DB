@@ -39,7 +39,7 @@ int buf_init(int nb) {
 }
 
 table_t buf_open_table_file(const char* pathname) {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
     table_t table_id = file_open_table_file(pathname);
     page_t hp;

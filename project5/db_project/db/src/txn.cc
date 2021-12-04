@@ -74,6 +74,7 @@ int trx_abort(int trx_id) {
 
 int trx_undo(int trx_id) {
     auto& entry = trx_table[trx_id];
+    // printf("%s %d\n", __func__, trx_id);
     for (auto iter = entry.logs.rbegin(); iter != entry.logs.rend(); ++iter) {
         table_t table_id = iter->table_id;
         mslot_t slot = iter->slot;
@@ -91,7 +92,7 @@ int trx_undo(int trx_id) {
 }
 
 int trx_release_locks(int trx_id) {
-    // printf("%s\n", __func__);
+    // printf("%s %d\n", __func__, trx_id);
     lock_t* lock = trx_table[trx_id].head;
     if (lock == 0) return 0;
     lock_t* next = lock->trx_next;
@@ -117,20 +118,9 @@ int init_lock_table() {
     return pthread_mutex_init(&lock_table_latch, NULL);
 }
 
-// • Allocate and append a new lock object to the lock list of the record having the key.
-// • If there is a predecessor’s lock object in the lock list, sleep until the predecessor to release its lock.
-// • If there is no predecessor’s lock object, return the address of the new lock object.
-// • If an error occurs, return NULL.
-// • lock_mode: 0 (SHARED) or 1 (EXCLUSIVE)
-lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode) {
-    // printf("%d %s trylock trx\n", trx_id, __func__);
-    pthread_mutex_lock(&trx_table_latch);
-    // printf("%d %s lock trx\n", trx_id, __func__);
-    // printf("%s 1\n", __func__);
+lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode, int* ret_slock, int* ret_xlock) {
     pthread_mutex_lock(&lock_table_latch);
-    // printf("%s 2\n", __func__);
-    if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, lock_mode);
-
+    // printf("%s\n", __func__);
     auto tmp = lock_table.find({table_id, page_id});
     // not in lock table -> insert empty list into table
     if (tmp == lock_table.end()) {
@@ -139,167 +129,107 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     }
 
     lock_entry_t* entry = &(lock_table[{table_id, page_id}]);
-    bool has_slock = 0;
-    bool has_xlock = 0;
+    *ret_slock = 0;
+    *ret_xlock = 0;
+
+    // check if this trx has the lock
     // case : s lock
     if (lock_mode == SHARED) {
         for (lock_t* l = entry->head; l; l = l->next) {
-            // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
             if (l->record_id == key && l->trx_id != trx_id) {
-                if (l->lock_mode == SHARED) has_slock = 1;
-                else has_xlock = 1;
+                if (l->lock_mode == SHARED) *ret_slock = 1;
+                else *ret_xlock = 1;
             }
             if (l->record_id != key || l->trx_id != trx_id) continue;
+
             // case : s lock or x lock found
             // do not need to acquire new lock
             else {
-                // printf("%d %s unlock trx\n", trx_id, __func__);
-                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
-                pthread_mutex_unlock(&trx_table_latch);
-                // printf("this txn(%d) has s or x lock\n", trx_id);
                 pthread_mutex_unlock(&lock_table_latch);
-                return l;
+                return NULL;
             }
         }
     }
     // case : x lock
     else {
         for (lock_t* l = entry->head; l; l = l->next) {
-            // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
+            if (l->record_id == key) printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
             if (l->record_id == key && l->trx_id != trx_id) {
-                if (l->lock_mode == SHARED) has_slock = 1;
-                else has_xlock = 1;
+                if (l->lock_mode == SHARED) *ret_slock = 1;
+                else *ret_xlock = 1;
             }
             if (l->record_id != key || l->trx_id != trx_id) continue;
 
             // case : s lock found
             if (l->lock_mode == SHARED) {
-                // printf("this txn(%d) has s lock\n", trx_id);
 
                 // check if it is the only lock of the record
                 bool is_last = 1;
                 for (lock_t* ll = entry->head; ll; ll = ll->next) {
+                    if (ll->record_id == key) printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
+                    if (ll->record_id == key && ll->trx_id != trx_id) {
+                        if (ll->lock_mode == SHARED) *ret_slock = 1;
+                        else *ret_xlock = 1;
+                    }
+
                     if (ll->record_id == key && ll != l) {
-                        // printf("(not last!) lock_t* ll trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
                         is_last = 0;
-                        break;
                     }
                 }
+
                 // if last-> do not wait and upgrade the lock to EXCLUSIVE
                 if (is_last) {
-                    // printf("the only lock -> upgrade\n");
                     l->lock_mode = EXCLUSIVE;
-                    // printf("%d %s unlock trx\n", trx_id, __func__);
-                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
-                    pthread_mutex_unlock(&trx_table_latch);
                     pthread_mutex_unlock(&lock_table_latch);
-                    return l;
+                    return NULL;
                 }
-                // if not last -> check dead lock and wait
-                // printf("not the only lock-> check deadlock and wait\n");
-                // case : deadlock
+
+                // if not last-> add new lock to the lock list and return
                 lock_t* lock = (lock_t*)malloc(sizeof(lock_t));
                 lock->sentinel = entry;
                 lock->record_id = key;
                 lock->trx_id = trx_id;
                 lock->lock_mode = lock_mode;
-
-                add_edge(lock);
-                push_back_lock(lock);
-                if (dfs(table_id, page_id, key, trx_id, lock_mode)) {
-                    // printf("%d %s unlock trx\n", trx_id, __func__);
-                ("[THREAD %d] key %d aborting lock mode %d\n", trx_id, key, lock_mode);
-                    pthread_mutex_unlock(&trx_table_latch);
-                    pthread_mutex_unlock(&lock_table_latch);
-                    return NULL;
-                }
-
-                if (pthread_cond_init(&(lock->condition), NULL)) {
-                    // printf("in lock_acquire pthread_cond_init nonzero return value");
-                    return NULL;
-                }
-                // printf("wait\n");
-                pthread_mutex_unlock(&trx_table_latch);
-                if (pthread_cond_wait(&(lock->condition), &lock_table_latch)) {
-                    // printf("in lock_acquire pthread_cond_wait nonzero return value");
-                    return NULL;
-                }
-                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
-                // printf("%d %s unlock trx\n", trx_id, __func__);
+                lock_push_back(lock);
                 pthread_mutex_unlock(&lock_table_latch);
                 return lock;
             }
             // case : x lock found
             // do not need to acquire new lock
             else {
-                // printf("%d %s unlock trx\n", trx_id, __func__);
-                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
-                pthread_mutex_unlock(&trx_table_latch);
                 pthread_mutex_unlock(&lock_table_latch);
-                return l;
+                return NULL;
             }
         }
     }
     lock_t* lock = (lock_t*)malloc(sizeof(lock_t));
     lock->sentinel = entry;
     lock->record_id = key;
-    lock->lock_mode = lock_mode;
     lock->trx_id = trx_id;
-
-    // S1 -> S2 -> (S3)
-    if (lock_mode == SHARED && has_slock && !has_xlock) {
-        // printf("S1S2S3\n");
-        // 락 매달고 안기다리고 리턴
-        push_back_lock(lock);
-
-        if (pthread_cond_init(&(lock->condition), NULL)) {
-            // printf("in lock_acquire pthread_cond_init nonzero return value");
-            return NULL;
-        }
-    }
-    // sleep until the predecessor releases its lock
-    else if (has_slock || has_xlock) {
-        // case : deadlock
-        add_edge(lock);
-        push_back_lock(lock);
-        if (dfs(table_id, page_id, key, trx_id, lock_mode)) {
-            // printf("%d %s unlock trx\n", trx_id, __func__);
-                ("[THREAD %d] key %d aborting lock mode %d\n", trx_id, key, lock_mode);
-            pthread_mutex_unlock(&trx_table_latch);
-            pthread_mutex_unlock(&lock_table_latch);
-            return NULL;
-        }
-
-       if (pthread_cond_init(&(lock->condition), NULL)) {
-            // printf("in lock_acquire pthread_cond_init nonzero return value");
-            return NULL;
-        }
-        // printf("wait\n");
-        pthread_mutex_unlock(&trx_table_latch);
-        if (pthread_cond_wait(&(lock->condition), &lock_table_latch)) {
-            // printf("in lock_acquire pthread_cond_wait nonzero return value");
-            return NULL;
-        }
-                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
-        pthread_mutex_unlock(&lock_table_latch);
-        // printf("returning lock\n");
-        return lock;
-    }
-    // no predecessor for the record!!!!!
-    else {
-        push_back_lock(lock);
-
-        if (pthread_cond_init(&(lock->condition), NULL)) {
-            // printf("in lock_acquire pthread_cond_init nonzero return value");
-            return NULL;
-        }
-    }
-
-    // printf("%d %s unlock trx\n", trx_id, __func__);
-                ("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, lock_mode);
-    pthread_mutex_unlock(&trx_table_latch);
+    lock->lock_mode = lock_mode;
+    lock_push_back(lock);
     pthread_mutex_unlock(&lock_table_latch);
-    // printf("returning lock\n");
+    return lock;
+}
+
+lock_t* trx_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode, lock_t* lock, int has_slock, int has_xlock) {
+    pthread_mutex_lock(&trx_table_latch);
+    // printf("%s\n", __func__);
+    // printf("[THREAD %d] acquiring key %d lock_mode %d <s %d, x %d>\n", trx_id, key, lock_mode, has_slock, has_xlock);
+    add_edge(lock);
+    trx_push_back(lock);
+    if (dfs(table_id, page_id, key, trx_id, lock_mode)) {
+        pthread_mutex_unlock(&trx_table_latch);
+        return NULL;
+    }
+    pthread_cond_init(&(lock->condition), NULL);
+    if ((lock_mode == SHARED && has_xlock) || (lock_mode == EXCLUSIVE && (has_xlock || has_slock))){
+        // printf("wait\n");
+        pthread_cond_wait(&(lock->condition), &trx_table_latch);
+        // printf("wait done\n");
+    }
+    // printf("[THREAD %d] acquired key %d lock_mode %d\n", trx_id, key, lock_mode);
+    pthread_mutex_unlock(&trx_table_latch);
     return lock;
 }
 
@@ -321,6 +251,7 @@ int lock_release(lock_t* lock_obj, int mode) {
 
     for (lock_t* l = entry->head; l; l = l->next) {
         if (l->record_id == lock_obj->record_id) {
+            // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
             ++cnt;
             if (l == lock_obj) {
                 break;
@@ -344,9 +275,9 @@ int lock_release(lock_t* lock_obj, int mode) {
         lock_obj->next->prev = lock_obj->prev;
     }
     // printf("removed from list\n");
-
+    // printf("cnt %d\n", cnt);
     // case : releasing first lock of the record
-    if (cnt == 0 || cnt == 1) {
+    if (cnt <= 2) {
         // printf("is first\n");
         for (lock_t* l = entry->head; l; l = l->next) {
             // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
@@ -449,7 +380,7 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
         int a = fr.first;
         int b = fr.second;
         if (b == trx_id) {
-            // printf("return 1\n");
+            // printf("cycle 1\n");
             return 1;
         }
         // trx end -> edge remove!
@@ -464,58 +395,38 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
             q.push({b, edge});
         }
     }
-    // printf("return 0\n");
+    // printf("cycle 0\n");
     return 0;
 }
 
 // S1 S2 뒤에 X1 매달 때..
 // 1 -> 1???????? 
 void add_edge(lock_t* lock) {
-    lock_entry_t* lentry = lock->sentinel;
     trx_entry_t* tentry = &(trx_table[lock->trx_id]);
 
     if (lock->lock_mode == SHARED) {
-        lock_t* l = lentry->tail;
+        lock_t* l = lock;
         for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
         if (l) {
             tentry->wait_edges.insert(l->trx_id);
+            // printf("%d waits for %d\n", lock->trx_id, l->trx_id);
         }
     }
     else {
-        lock_t* l = lentry->tail;
+        lock_t* l = lock;
         for (; l; l = l->prev) {
             if (l->record_id != lock->record_id) continue;
             if (l->trx_id == lock->trx_id) continue;
             tentry->wait_edges.insert(l->trx_id);
+            // printf("%d waits for %d\n", lock->trx_id, l->trx_id);
             if (l->lock_mode == EXCLUSIVE) break;
         }
     }
 }
 
-void push_back_lock(lock_t* lock) {
+void lock_push_back(lock_t* lock) {
     // printf("%s\n", __func__);
     lock_entry_t* lentry = lock->sentinel;
-    trx_entry_t* tentry = &(trx_table[lock->trx_id]);
-    if (tentry->head == NULL) {
-        // printf("[THREAD %d] push_back_lock head change\n", lock->trx_id);
-        assert(tentry->tail == NULL);
-        tentry->head = tentry->tail = lock;
-        lock->trx_next = NULL;
-    }
-    else if (tentry->head == tentry->tail) {
-        lock_t* prev = tentry->tail;
-        assert(prev->trx_next == NULL);
-        prev->trx_next = lock;
-        lock->trx_next = NULL;
-        tentry->tail = lock;
-    }
-    else {
-        lock_t* last = tentry->tail;
-        assert(last->trx_next == NULL);
-        last->trx_next = lock;
-        lock->trx_next = NULL;
-        tentry->tail = lock;
-    }
     if (lentry->head == NULL) {
         assert(lentry->tail == NULL);
         lentry->head = lentry->tail = lock;
@@ -543,4 +454,27 @@ void push_back_lock(lock_t* lock) {
     }
 
     // printf("%s done\n", __func__);
+}
+void trx_push_back(lock_t* lock) {
+    trx_entry_t* tentry = &(trx_table[lock->trx_id]);
+    if (tentry->head == NULL) {
+        // printf("[THREAD %d] push_back_lock head change\n", lock->trx_id);
+        assert(tentry->tail == NULL);
+        tentry->head = tentry->tail = lock;
+        lock->trx_next = NULL;
+    }
+    else if (tentry->head == tentry->tail) {
+        lock_t* prev = tentry->tail;
+        assert(prev->trx_next == NULL);
+        prev->trx_next = lock;
+        lock->trx_next = NULL;
+        tentry->tail = lock;
+    }
+    else {
+        lock_t* last = tentry->tail;
+        assert(last->trx_next == NULL);
+        last->trx_next = lock;
+        lock->trx_next = NULL;
+        tentry->tail = lock;
+    }
 }
