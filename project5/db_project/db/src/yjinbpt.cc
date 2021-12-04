@@ -161,14 +161,17 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         }
         *old_val_size = iter->size;
         // assert(*old_val_size == new_val_size);
-        
+
         page = leaf;
         buf_write_page(&page, ctrl);
         pthread_mutex_unlock(&(ctrl->mutex));
-        // printf("[THREAD %d] key %d page latch unlock\n", trx_id, key);
+
         pthread_mutex_lock(&trx_table_latch);
-        trx_table[trx_id].old_vals[{table_id, key}].push_back({pn, log_value});
+        trx_table[trx_id].logs.emplace_back(table_id, pn, *iter, log_value);
         pthread_mutex_unlock(&trx_table_latch);
+        // // printf("[THREAD %d] key %d page latch unlock\n", trx_id, key);
+        // trx_table[trx_id].old_vals[{table_id, key}].push_back({pn, log_value});
+        // pthread_mutex_unlock(&trx_table_latch);
         return 0; 
     }
     else {

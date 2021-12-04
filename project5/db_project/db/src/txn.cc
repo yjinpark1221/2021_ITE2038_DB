@@ -87,27 +87,18 @@ int trx_undo(int trx_id) {
     // printf("[THREAD %d] %s\n", trx_id, __func__);
     auto& entry = trx_table[trx_id];
     // printf("entry log size %d\n", entry.old_vals.size());
-    for (auto old : entry.old_vals) {
-        table_t table_id = old.first.first;
-        key__t key = old.first.second;
-        pagenum_t pn = old.second[0].first;
-        // printf("log pn %d\n", pn);
-        std::string value = old.second[0].second;
-        // size 다른게 들어왔었나? 업데이트에서? 
-        page_t page;
-        // printf("buf_read_page start\n");
+    for (auto iter = entry.logs.rbegin(); iter != entry.logs.rend(); ++iter) {
+        table_t table_id = iter->table_id;
+        mslot_t slot = iter->slot;
+        pagenum_t pn = iter->pn;
+        std::string value = iter->value;
         ctrl_t* ctrl = buf_read_page(table_id, pn);
-        // printf("buf_read_page end\n");
-        mleaf_t leaf = *(ctrl->frame);
-        auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
-        assert(iter->key == key);
-        leaf.values[iter - leaf.slots.begin()] = value;
-
-        page = leaf;
+        page_t page = *(ctrl->frame);
+        for (int i = 0; i < slot.size; ++i) {
+            page.a[slot.offset + i] = value[i];
+        }
         buf_write_page(&page, ctrl);
-        // printf("ctrl->pagenum = %d\n", ctrl->tp.second);
-        // printf("rolling back table %d, page %d, key %d, value %s\n", table_id, pn, key, value.c_str());
-        pthread_mutex_unlock(&(ctrl->mutex));
+        pthread_mutex_unlock(&ctrl->mutex);
     }
     return 0;
 }

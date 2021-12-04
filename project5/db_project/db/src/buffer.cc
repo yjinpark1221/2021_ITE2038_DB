@@ -127,16 +127,14 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum, int trx_id ) {
         // LRU flush
         ct = flush_LRU(table_id, pagenum);
         tp2control[{table_id, pagenum}] = ct;
-        move_to_tail(ct);
         // disk to buf
         file_read_page(table_id, pagenum, ct->frame);
     }
     // in cache
     else {
         ct = iter->second;        
-        move_to_tail(ct);
     }
-
+    move_to_tail(ct);
     // printf("[THREAD %d] buf_read_page trylock page %d mutex\n", trx_id,  pagenum);
     pthread_mutex_lock(&(ct->mutex));
     // printf("[THREAD %d] buf_read_page lock page %d mutex\n", trx_id, pagenum);
@@ -174,7 +172,7 @@ void buf_write_page(const page_t* src, ctrl_t* ctrl) {
     // in cache
     ct = iter->second;
     memcpy(ct->frame, src, PAGE_SIZE);
-    move_to_tail(ct);
+    // move_to_tail(ct);
     ct->is_dirty = 1;
     return;
 }
@@ -190,9 +188,6 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
         control[cur_buf].next = NULL;
         control[cur_buf].prev = NULL;
         tp2control[{table_id, pagenum}] = control + cur_buf;
-        move_to_tail(control + cur_buf);
-        assert(control[cur_buf].next != NULL);
-        assert(control[cur_buf].prev != NULL);
         // printf("cur_buf %d\n", cur_buf);
         ++cur_buf;
         return control + cur_buf - 1;
@@ -206,6 +201,10 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
         }
     }   
 
+    // ctrl_t* ct = head.next;
+    // pthread_mutex_lock(&(ct->mutex));
+    
+
     auto iter = tp2control.find(ct->tp);
     if (iter == tp2control.end()) {
         perror("in flush_LRU iter not found");
@@ -218,7 +217,6 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
     tp2control[{table_id, pagenum}] = ct;
     ct->is_dirty = 0;
 
-    move_to_tail(ct);
     pthread_mutex_unlock(&ct->mutex);
     return ct;
 }
@@ -262,15 +260,41 @@ void read_header(table_t table_id) {
 // This function moves ct to the tail
 // called when referenced
 void move_to_tail(ctrl_t* ct) {
-    //printf("%s\n", __func__);
+    // printf("%s\n", __func__);
+    // for (ctrl_t* ct = head.next; ct != &tail; ct = ct->next) {
+    //     printf("ct t %d p %d\n", ct->tp.first, ct->tp.second);
+    // }
     ctrl_t* prev = ct->prev, *next = ct->next, *last = tail.prev;
+    // case : no ctrl block in the list
+    if (head.next == &tail) {
+        assert(prev == NULL); // 문제 
+        assert(next == NULL);
+        assert(last == &head);
+        head.next = ct;
+        tail.prev = ct;
+        ct->prev = &head;
+        ct->next = &tail;
+        // printf("first ctrl\n");
+        return;
+    }
+
+    // case : only one ctrl block // or it is the last one
     if (last == ct) {
+        if (ct->next != &tail) {
+            printf("ct->next %d %d\n", ct->next->tp.first, ct->next->tp.second);
+            sleep(1);
+        }
+        assert(ct->next == &tail); // 문제
         //printf("already last\n");
         return;
     }
-    if (prev)prev->next = next;
-    if (next)next->prev = prev;
-    
+
+    if (prev) {
+        assert(next);
+        prev->next = next;
+        next->prev = prev;
+    }
+
     //printf("%p %p %p %p %p %p\n", &head, &tail, prev, next, last, ct);
     last->next = ct;
     ct->prev = last;

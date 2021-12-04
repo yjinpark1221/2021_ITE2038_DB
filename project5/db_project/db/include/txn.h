@@ -39,17 +39,20 @@ struct hash_t {
     }
 };
 
+struct log_t {
+    table_t table_id;
+    pagenum_t pn;
+    mslot_t slot;
+    std::string value;
+    log_t(table_t tid, pagenum_t p, mslot_t sl, std::string val) : table_id(tid), pn(p), slot(sl), value(val) {}
+};
 
 struct trx_entry_t {
     int trx_id;
     pthread_mutex_t mutex;
     lock_t* head;
     lock_t* tail;
-    // std::vector<table_t> log_table_id;
-    // std::vector<pagenum_t> log_pn;
-    // std::vector<key__t> log_key;
-    // std::vector<std::string> log_value;
-    std::map<std::pair<table_t, key__t>, std::vector<std::pair<key__t, std::string> > > old_vals;
+    std::vector<log_t> logs;
     std::vector<int> wait_edges;
     trx_entry_t(int trx_id) : trx_id(trx_id), head(NULL), tail(NULL) {
         pthread_mutex_init(&mutex, NULL);

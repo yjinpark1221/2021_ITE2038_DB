@@ -1,2 +1,15 @@
+
+
+
+
+
+
+
+
+
 cmake -S . -B build
-cmake --build build ; build/bin/db_test
+cmake --build build
+cd build
+ctest
+cd ..
+
