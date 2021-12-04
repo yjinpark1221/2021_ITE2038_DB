@@ -146,6 +146,7 @@ void file_write_page(table_t table_id, pagenum_t pagenum, const page_t* src) {
         perror("file_write_page src NULL");
         exit(0);
     }
+    // printf("fd %d, src %p, pagenum %d\n", fd, src, pagenum);
     if (pwrite(fd, src, PAGE_SIZE, pagenum * PAGE_SIZE) <= 0) {
         perror("file_write_page pwrite error");
         exit(0);

@@ -21,7 +21,7 @@ int buf_init(int nb) {
     tail.prev = &head;
     head.prev = NULL;
     tail.next = NULL;
-    
+    cur_buf = 0;
     pthread_mutex_init(&buf_latch, NULL);
 
     num_buf = nb;
@@ -53,18 +53,20 @@ table_t buf_open_table_file(const char* pathname) {
 }
 
 void buf_close_table_file() {
-    //printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
+    // printf("buf_latch locked\n");
     // flush headers 
     for (int i = 0; i < openedFds.size(); ++i) {
         flush(hcontrol + i);
     }
-
+    // printf("headers flushed\n");
     // flush frames
     for (int i = 0; i < cur_buf; ++i) {
         flush(control + i);
     }
     pthread_mutex_unlock(&buf_latch);
+    // printf("other frames flushed\n");
 
     free(cache);
     free(hcache);
@@ -191,6 +193,7 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
         move_to_tail(control + cur_buf);
         assert(control[cur_buf].next != NULL);
         assert(control[cur_buf].prev != NULL);
+        // printf("cur_buf %d\n", cur_buf);
         ++cur_buf;
         return control + cur_buf - 1;
     }
@@ -223,7 +226,7 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
 // This function writes the frame to disk if it is dirty
 // called flushing the head.next
 void flush(ctrl_t* ctrl) {
-    //printf("%s\n", __func__);
+    // printf("%s\n", __func__);
     // TODO : check if mutex is unlocked
     if (ctrl->is_dirty) {
         file_write_page(ctrl->tp.first, ctrl->tp.second, ctrl->frame);

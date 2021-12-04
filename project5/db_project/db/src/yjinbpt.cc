@@ -147,7 +147,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
             *old_val_size = 0;
             return 1;
         }
-        printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
+        // printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
         ctrl = buf_read_page(table_id, pn, trx_id);
         // printf("[THREAD %d] key %d buf_read_page done\n", trx_id, key);
         leaf = *(ctrl->frame);
@@ -156,18 +156,19 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         int idx = iter - leaf.slots.begin();
         std::string log_value = leaf.values[idx];
         auto& old_value = leaf.values[idx];
-        for (int i = 0; i < new_val_size; ++i) {
+        for (int i = 0; i < iter->size; ++i) {
             old_value[i] = values[i];
         }
         *old_val_size = iter->size;
-        assert(*old_val_size == new_val_size);
+        // assert(*old_val_size == new_val_size);
         
         page = leaf;
         buf_write_page(&page, ctrl);
         pthread_mutex_unlock(&(ctrl->mutex));
         // printf("[THREAD %d] key %d page latch unlock\n", trx_id, key);
-
+        pthread_mutex_lock(&trx_table_latch);
         trx_table[trx_id].old_vals[{table_id, key}].push_back({pn, log_value});
+        pthread_mutex_unlock(&trx_table_latch);
         return 0; 
     }
     else {
@@ -206,7 +207,7 @@ int init_db(int num_buf) {
 // • Clean up everything.
 // • If success, return 0. Otherwise, return non-zero value.
 int shutdown_db() {
-    // //// // print("%s\n", __func__);
+    // printf("%s\n", __func__);
     buf_close_table_file();
     return 0;
 }
@@ -252,7 +253,7 @@ pagenum_t find_leaf_page(table_t fd, key__t key) {
         // printf("printing internal\nis_leaf %d, num_keys %d, parent %d\n", internal.is_leaf, internal.num_keys, internal.parent);
         // printf("first child %d\n", internal.first_child);
         // for (int i = 0; i < internal.num_keys; ++i) {
-        //     printf("%d ", internal.keys[i]);
+        //     // printf("%d ", internal.keys[i]);
         // }
         if (i == 0) pn = internal.first_child;
         else pn = internal.children[i - 1];
