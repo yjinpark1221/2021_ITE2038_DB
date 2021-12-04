@@ -94,15 +94,15 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
 
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
-        if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 0);
+        // if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 0);
         if (trx_id && lock_acquire(table_id, pn, key, trx_id, 0) == NULL) { // deadlock -> abort
             if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
             memset(ret_val, 0, 112);
             *val_size = 0;
-            return 1;
+            return -1;
         }
-        if (trx_id) printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 0);
+        // if (trx_id) printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 0);
         i = iter - leaf.slots.begin();
         for (int j = 0; j < leaf.slots[i].size; ++j) {
             ret_val[j] = leaf.values[i][j];
@@ -140,12 +140,12 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     pthread_mutex_unlock(&ctrl->mutex);
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
-        if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 1);
+        // if (trx_id) printf("[THREAD %d] key %d acquiring lock mode %d\n", trx_id, key, 1);
         if (lock_acquire(table_id, pn, key, trx_id, 1) == NULL) { // deadlock -> abort
-            if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
+            // if (trx_id) printf("[THREAD %d] aborting\n", trx_id);
             trx_abort(trx_id);
             *old_val_size = 0;
-            return 1;
+            return -1;
         }
         // printf("[THREAD %d] key %d acquired lock mode %d\n", trx_id, key, 1);
         ctrl = buf_read_page(table_id, pn, trx_id);

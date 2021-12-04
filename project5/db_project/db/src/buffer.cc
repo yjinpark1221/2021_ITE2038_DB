@@ -262,7 +262,7 @@ void read_header(table_t table_id) {
 void move_to_tail(ctrl_t* ct) {
     // printf("%s\n", __func__);
     // for (ctrl_t* ct = head.next; ct != &tail; ct = ct->next) {
-    //     printf("ct t %d p %d\n", ct->tp.first, ct->tp.second);
+    //     // printf("ct t %d p %d\n", ct->tp.first, ct->tp.second);
     // }
     ctrl_t* prev = ct->prev, *next = ct->next, *last = tail.prev;
     // case : no ctrl block in the list
@@ -274,16 +274,11 @@ void move_to_tail(ctrl_t* ct) {
         tail.prev = ct;
         ct->prev = &head;
         ct->next = &tail;
-        // printf("first ctrl\n");
         return;
     }
 
     // case : only one ctrl block // or it is the last one
     if (last == ct) {
-        if (ct->next != &tail) {
-            printf("ct->next %d %d\n", ct->next->tp.first, ct->next->tp.second);
-            sleep(1);
-        }
         assert(ct->next == &tail); // 문제
         //printf("already last\n");
         return;
@@ -302,8 +297,6 @@ void move_to_tail(ctrl_t* ct) {
     ct->next = &tail;
     tail.prev = ct;
     //printf("moved to tail\n");
-    if (tail.prev == &head) puts("!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    if (head.next == &tail) puts("??????????????????????????");
     // for (auto p = head.next; p != &tail;p = p->next) {
     //     //printf("%d %d\n", p->tp.first, p->tp.second);
     // }
