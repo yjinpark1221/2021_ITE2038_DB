@@ -129,8 +129,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     // printf("%d %s\n", trx_id, __func__);
     pagenum_t pn = find_leaf_page(table_id, key);
     if (pn == 0) { // fail
-        ret_val[0] = 0;
-        *val_size = 0;
+        *old_val_size = 0;
         return 1;
     }
     // printf("leaf page number %d\n", pn);
