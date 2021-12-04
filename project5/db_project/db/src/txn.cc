@@ -208,20 +208,20 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
                 // if not last -> check dead lock and wait
                 // printf("not the only lock-> check deadlock and wait\n");
                 // case : deadlock
-                if (bfs(table_id, page_id, key, trx_id, lock_mode)) {
-                    // printf("%d %s unlock trx\n", trx_id, __func__);
-                    pthread_mutex_unlock(&trx_table_latch);
-                    pthread_mutex_unlock(&lock_table_latch);
-                    return NULL;
-                }
-
                 lock_t* lock = (lock_t*)malloc(sizeof(lock_t));
                 lock->sentinel = entry;
                 lock->record_id = key;
                 lock->trx_id = trx_id;
                 lock->lock_mode = lock_mode;
 
+                add_edge(lock);
                 push_back_lock(lock);
+                if (bfs(table_id, page_id, key, trx_id, lock_mode)) {
+                    // printf("%d %s unlock trx\n", trx_id, __func__);
+                    pthread_mutex_unlock(&trx_table_latch);
+                    pthread_mutex_unlock(&lock_table_latch);
+                    return NULL;
+                }
 
                 if (pthread_cond_init(&(lock->condition), NULL)) {
                     // printf("in lock_acquire pthread_cond_init nonzero return value");
@@ -235,7 +235,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
                 }
                 // printf("%d %s unlock trx\n", trx_id, __func__);
                 pthread_mutex_unlock(&lock_table_latch);
-                return l;
+                return lock;
             }
             // case : x lock found
             // do not need to acquire new lock
@@ -267,14 +267,14 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     // sleep until the predecessor releases its lock
     else if (has_slock || has_xlock) {
         // case : deadlock
+        add_edge(lock);
+        push_back_lock(lock);
         if (bfs(table_id, page_id, key, trx_id, lock_mode)) {
             // printf("%d %s unlock trx\n", trx_id, __func__);
             pthread_mutex_unlock(&trx_table_latch);
             pthread_mutex_unlock(&lock_table_latch);
             return NULL;
         }
-
-        push_back_lock(lock);
 
        if (pthread_cond_init(&(lock->condition), NULL)) {
             // printf("in lock_acquire pthread_cond_init nonzero return value");
@@ -438,32 +438,11 @@ bool cycle_made(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock
 bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) {
     // printf("%s %d\n", __func__, trx_id);
     std::queue<std::pair<int, int> > q;
-    // {a, b} : b is waiting for a
     std::set<int> visited;
     visited.insert(trx_id);
 
     for (auto edge: trx_table[trx_id].wait_edges) {
         q.push({trx_id, edge});
-    }
-
-    if (lock_mode == SHARED) {
-        lock_t* l = lock_table[{table_id, pn}].tail;
-        // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
-        for (; l && (l->record_id != key || l->lock_mode == SHARED); l = l->prev);
-        if (l && l->trx_id != trx_id) {
-            q.push({trx_id, l->trx_id});
-            // printf("push back lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
-        }
-    }
-    else {
-        lock_t* l = lock_table[{table_id, pn}].tail;
-        // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
-        for (; l; l = l->prev) {
-            if (l->record_id != key || l->trx_id == trx_id) continue;
-            // printf("push back lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
-            q.push({trx_id, l->trx_id});
-            if (l->lock_mode == EXCLUSIVE) break;
-        }
     }
 
     for (; !q.empty();) {
@@ -478,8 +457,9 @@ bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
             return 1;
         }
         // trx end -> edge remove!
-        if (aborted_trx.find(a) != aborted_trx.end()) {
-            // wait_edge.erase()
+        // when b is aborted
+        if (trx_table.find(b) == trx_table.end()) {
+            trx_table[a].wait_edges.erase(b);
             continue;
         }
         if (visited.find(b) != visited.end()) continue;
@@ -492,9 +472,7 @@ bool bfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
     return 0;
 }
 
-
-void push_back_lock(lock_t* lock) {
-    // printf("%s\n", __func__);
+void add_edge(lock_t* lock) {
     lock_entry_t* lentry = lock->sentinel;
     trx_entry_t* tentry = &(trx_table[lock->trx_id]);
 
@@ -503,7 +481,7 @@ void push_back_lock(lock_t* lock) {
         // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
         for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
         if (l) {
-            tentry->wait_edges.push_back(l->trx_id);
+            tentry->wait_edges.insert(l->trx_id);
             // printf("push back lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
         }
     }
@@ -513,10 +491,15 @@ void push_back_lock(lock_t* lock) {
         for (; l; l = l->prev) {
             if (l->record_id != lock->record_id) continue;
             // printf("push back lock_t* l trx_id %d, lock_mode %d, record_id %d\n", lock->trx_id, lock->lock_mode, lock->record_id);
-            tentry->wait_edges.push_back(l->trx_id);
+            tentry->wait_edges.insert(l->trx_id);
             if (l->lock_mode == EXCLUSIVE) break;
         }
     }
+}
+void push_back_lock(lock_t* lock) {
+    // printf("%s\n", __func__);
+    lock_entry_t* lentry = lock->sentinel;
+    trx_entry_t* tentry = &(trx_table[lock->trx_id]);
     if (tentry->head == NULL) {
         // printf("[THREAD %d] push_back_lock head change\n", lock->trx_id);
         assert(tentry->tail == NULL);

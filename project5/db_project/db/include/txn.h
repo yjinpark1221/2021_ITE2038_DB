@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include <unordered_map>
 #include <cstdio>
-
+#include <set>
 #define SHARED 0
 #define EXCLUSIVE 1
 
@@ -53,7 +53,7 @@ struct trx_entry_t {
     lock_t* head;
     lock_t* tail;
     std::vector<log_t> logs;
-    std::vector<int> wait_edges;
+    std::set<int> wait_edges;
     trx_entry_t(int trx_id) : trx_id(trx_id), head(NULL), tail(NULL) {
         pthread_mutex_init(&mutex, NULL);
     }
@@ -81,4 +81,5 @@ int trx_abort(int trx_id);
 int trx_undo(int trx_id);
 int trx_release_locks(int trx_id);
 void push_back_lock(lock_t*);
+void add_edge(lock_t*);
 #endif /* __TXN_H__ */
