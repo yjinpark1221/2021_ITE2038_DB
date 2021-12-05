@@ -274,7 +274,7 @@ int lock_release(lock_t* lock_obj, int mode) {
     // printf("removed from list\n");
     // printf("cnt %d\n", cnt);
     // case : releasing first lock of the record
-    if (cnt <= 2) {
+    // if (cnt <= 2) {
         // printf("is first\n");
         for (lock_t* l = entry->head; l; l = l->next) {
             // printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
@@ -314,7 +314,7 @@ int lock_release(lock_t* lock_obj, int mode) {
                 break;
             }
         }
-    }
+    // }
     // case : not first -> do not need to signal next locks
 
     // printf("free lock\n");
