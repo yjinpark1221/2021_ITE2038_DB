@@ -146,7 +146,7 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum, int trx_id ) {
     return ct;
 }
 
-// TODO : ctrl_t** argument
+// 가정 : 이미 buf_read_page를 통해 page latch를 잡았다고 생각
 void buf_write_page(const page_t* src, ctrl_t* ctrl) {
     table_t table_id = ctrl->tp.first;
     pagenum_t pagenum = ctrl->tp.second;
@@ -157,7 +157,6 @@ void buf_write_page(const page_t* src, ctrl_t* ctrl) {
             if (hc->tp.first == table_id) {
                 memcpy(hc->frame, src, PAGE_SIZE);
                 hc->is_dirty = 1;
-                pthread_mutex_unlock(&buf_latch);
                 return;
             }
         }

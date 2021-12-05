@@ -80,7 +80,6 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     page_t page;
     mleaf_t leaf;
     pagenum_t pn = find_leaf_page(table_id, key);
-    // printf("found leaf\n");
     if (pn == 0) { // fail
         ret_val[0] = 0;
         *val_size = 0;
@@ -90,12 +89,12 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
     leaf = *(ctrl->frame);
     pthread_mutex_unlock(&(ctrl->mutex));
-    // printf("leaf page latch unlocked\n");
 
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
         if (trx_id) {
             int has_slock = 0, has_xlock = 0;
+            printf("[THREAD %d] acquiring %d lock_mode %d\n", trx_id, key, 0);
             lock_t* lock = lock_acquire(table_id, pn, key, trx_id, SHARED, &has_slock, &has_xlock);
             /* case : trx does not have the lock -> new lock returned
             */
@@ -108,6 +107,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
                 }   
             }
         }
+        printf("[THREAD %d] acquired %d lock_mode %d\n", trx_id, key, 0);
         i = iter - leaf.slots.begin();
         for (int j = 0; j < leaf.slots[i].size; ++j) {
             ret_val[j] = leaf.values[i][j];
@@ -145,6 +145,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
         int has_slock = 0, has_xlock = 0;
+        printf("[THREAD %d] acquiring %d lock_mode 1\n", trx_id, key);
         lock_t* lock = lock_acquire(table_id, pn, key, trx_id, EXCLUSIVE, &has_slock, &has_xlock);
         /* case : trx does not have the lock -> new lock returned
         */
@@ -155,6 +156,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
                 return -1;
             }
         }
+        printf("[THREAD %d] acquiring %d lock_mode 1\n", trx_id, key);
         /* case : trx already has the lock
         */
         ctrl = buf_read_page(table_id, pn, trx_id);

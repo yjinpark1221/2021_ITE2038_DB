@@ -153,7 +153,6 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     // case : x lock
     else {
         for (lock_t* l = entry->head; l; l = l->next) {
-            if (l->record_id == key) printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
             if (l->record_id == key && l->trx_id != trx_id) {
                 if (l->lock_mode == SHARED) *ret_slock = 1;
                 else *ret_xlock = 1;
@@ -166,7 +165,6 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
                 // check if it is the only lock of the record
                 bool is_last = 1;
                 for (lock_t* ll = entry->head; ll; ll = ll->next) {
-                    if (ll->record_id == key) printf("lock_t* l trx_id %d, lock_mode %d, record_id %d\n", l->trx_id, l->lock_mode, l->record_id);
                     if (ll->record_id == key && ll->trx_id != trx_id) {
                         if (ll->lock_mode == SHARED) *ret_slock = 1;
                         else *ret_xlock = 1;
@@ -380,7 +378,7 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
         int a = fr.first;
         int b = fr.second;
         if (b == trx_id) {
-            // printf("cycle 1\n");
+            printf("cycle 1\n");
             return 1;
         }
         // trx end -> edge remove!
@@ -395,7 +393,7 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
             q.push({b, edge});
         }
     }
-    // printf("cycle 0\n");
+    printf("cycle 0\n");
     return 0;
 }
 
@@ -409,7 +407,7 @@ void add_edge(lock_t* lock) {
         for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
         if (l) {
             tentry->wait_edges.insert(l->trx_id);
-            // printf("%d waits for %d\n", lock->trx_id, l->trx_id);
+            printf("%d waits for %d\n", lock->trx_id, l->trx_id);
         }
     }
     else {
@@ -418,7 +416,7 @@ void add_edge(lock_t* lock) {
             if (l->record_id != lock->record_id) continue;
             if (l->trx_id == lock->trx_id) continue;
             tentry->wait_edges.insert(l->trx_id);
-            // printf("%d waits for %d\n", lock->trx_id, l->trx_id);
+            printf("%d waits for %d\n", lock->trx_id, l->trx_id);
             if (l->lock_mode == EXCLUSIVE) break;
         }
     }
