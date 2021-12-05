@@ -174,7 +174,6 @@ void buf_write_page(const page_t* src, ctrl_t* ctrl) {
     // in cache
     ct = iter->second;
     memcpy(ct->frame, src, PAGE_SIZE);
-    // move_to_tail(ct);
     ct->is_dirty = 1;
     return;
 }
@@ -214,7 +213,6 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
     }
     tp2control.erase(iter);
     flush(ct);
-    //printf("FLUSHHHHHH");
     ct->tp = {table_id, pagenum};
     tp2control[{table_id, pagenum}] = ct;
     ct->is_dirty = 0;
@@ -226,8 +224,6 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
 // This function writes the frame to disk if it is dirty
 // called flushing the head.next
 void flush(ctrl_t* ctrl) {
-    // printf("%s\n", __func__);
-    // TODO : check if mutex is unlocked
     if (ctrl->is_dirty) {
         file_write_page(ctrl->tp.first, ctrl->tp.second, ctrl->frame);
         ctrl->is_dirty = 0;
@@ -236,7 +232,6 @@ void flush(ctrl_t* ctrl) {
 
 // This function flushes the header page of the table_id 
 void flush_header(table_t table_id) {
-    //printf("%s\n", __func__);
     for (int i = 0; i < openedFds.size(); ++i) {
         ctrl_t* hc = hcontrol + i;
         if (hc->tp.first == 0) return;
@@ -262,14 +257,10 @@ void read_header(table_t table_id) {
 // This function moves ct to the tail
 // called when referenced
 void move_to_tail(ctrl_t* ct) {
-    // printf("%s\n", __func__);
-    // for (ctrl_t* ct = head.next; ct != &tail; ct = ct->next) {
-    //     // printf("ct t %d p %d\n", ct->tp.first, ct->tp.second);
-    // }
     ctrl_t* prev = ct->prev, *next = ct->next, *last = tail.prev;
     // case : no ctrl block in the list
     if (head.next == &tail) {
-        assert(prev == NULL); // 문제 
+        assert(prev == NULL); 
         assert(next == NULL);
         assert(last == &head);
         head.next = ct;
@@ -281,7 +272,7 @@ void move_to_tail(ctrl_t* ct) {
 
     // case : only one ctrl block // or it is the last one
     if (last == ct) {
-        assert(ct->next == &tail); // 문제
+        assert(ct->next == &tail);
         //printf("already last\n");
         return;
     }
@@ -292,15 +283,10 @@ void move_to_tail(ctrl_t* ct) {
         next->prev = prev;
     }
 
-    //printf("%p %p %p %p %p %p\n", &head, &tail, prev, next, last, ct);
     last->next = ct;
     ct->prev = last;
 
     ct->next = &tail;
     tail.prev = ct;
-    //printf("moved to tail\n");
-    // for (auto p = head.next; p != &tail;p = p->next) {
-    //     //printf("%d %d\n", p->tp.first, p->tp.second);
-    // }
 }
 

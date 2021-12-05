@@ -66,8 +66,10 @@ int trx_commit(int trx_id) {
 
 int trx_abort(int trx_id) {
     pthread_mutex_lock(&trx_table_latch);
+
     trx_undo(trx_id);
     trx_release_locks(trx_id);
+    
     pthread_mutex_unlock(&trx_table_latch);
     return 1;
 }
@@ -80,6 +82,7 @@ int trx_undo(int trx_id) {
         mslot_t slot = iter->slot;
         pagenum_t pn = iter->pn;
         std::string value = iter->value;
+
         ctrl_t* ctrl = buf_read_page(table_id, pn);
         page_t page = *(ctrl->frame);
         for (int i = 0; i < slot.size; ++i) {
@@ -382,7 +385,7 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
             return 1;
         }
         // trx end -> edge remove!
-        // when b is aborted
+        // when b is aborted or committed
         if (trx_table.find(b) == trx_table.end()) {
             trx_table[a].wait_edges.erase(b);
             continue;
@@ -397,17 +400,17 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
     return 0;
 }
 
-// S1 S2 뒤에 X1 매달 때..
-// 1 -> 1???????? 
 void add_edge(lock_t* lock) {
     trx_entry_t* tentry = &(trx_table[lock->trx_id]);
 
     if (lock->lock_mode == SHARED) {
         lock_t* l = lock;
-        for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
-        if (l) {
-            tentry->wait_edges.insert(l->trx_id);
-            printf("%d waits for %d\n", lock->trx_id, l->trx_id);
+        for (; l; ) {
+            for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
+            if (l) {
+                tentry->wait_edges.insert(l->trx_id);
+                printf("%d waits for %d\n", lock->trx_id, l->trx_id);
+            }
         }
     }
     else {
@@ -417,7 +420,7 @@ void add_edge(lock_t* lock) {
             if (l->trx_id == lock->trx_id) continue;
             tentry->wait_edges.insert(l->trx_id);
             printf("%d waits for %d\n", lock->trx_id, l->trx_id);
-            if (l->lock_mode == EXCLUSIVE) break;
+            // if (l->lock_mode == EXCLUSIVE) break;
         }
     }
 }
@@ -456,7 +459,6 @@ void lock_push_back(lock_t* lock) {
 void trx_push_back(lock_t* lock) {
     trx_entry_t* tentry = &(trx_table[lock->trx_id]);
     if (tentry->head == NULL) {
-        // printf("[THREAD %d] push_back_lock head change\n", lock->trx_id);
         assert(tentry->tail == NULL);
         tentry->head = tentry->tail = lock;
         lock->trx_next = NULL;
