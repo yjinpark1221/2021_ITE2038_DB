@@ -1,7 +1,9 @@
 #ifndef MAINTEST
 #include "yjinbpt.h"
 #endif
-
+#define FAILURE 1
+#define SUCCESS 0
+#define ABORT 1
 #include <cassert>
 #include <iostream>
 #define VERBOSE 0
@@ -83,7 +85,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     if (pn == 0) { // fail
         ret_val[0] = 0;
         *val_size = 0;
-        return 1;
+        return FAILURE;
     }
 
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
@@ -103,7 +105,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
                     trx_abort(trx_id);
                     memset(ret_val, 0, 112);
                     *val_size = 0;
-                    return -1;
+                    return ABORT;
                 }   
             }
         }
@@ -113,12 +115,12 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
             ret_val[j] = leaf.values[i][j];
         }
         *val_size = leaf.slots[i].size;
-        return 0;
+        return SUCCESS;
     }
     else { // fail
         ret_val[0] = 0;
         *val_size = 0;
-        return 1;
+        return FAILURE;
     }
 }
 
@@ -134,7 +136,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     pagenum_t pn = find_leaf_page(table_id, key);
     if (pn == 0) { // fail
         *old_val_size = 0;
-        return 1;
+        return FAILURE;
     }
     // printf("leaf page number %d\n", pn);
     page_t page;
@@ -153,7 +155,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
             if (trx_acquire(table_id, pn, key, trx_id, EXCLUSIVE, lock, has_slock, has_xlock) == NULL) { // deadlock or waiting
                 trx_abort(trx_id);
                 *old_val_size = 0;
-                return -1;
+                return ABORT;
             }
         }
         printf("[THREAD %d] acquiring %d lock_mode 1\n", trx_id, key);
@@ -171,7 +173,6 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
             old_value[i] = values[i];
         }
         *old_val_size = iter->size;
-        // assert(*old_val_size == new_val_size);
 
         page = leaf;
         buf_write_page(&page, ctrl);
@@ -180,15 +181,11 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         pthread_mutex_lock(&trx_table_latch);
         trx_table[trx_id].logs.emplace_back(table_id, pn, *iter, log_value);
         pthread_mutex_unlock(&trx_table_latch);
-        // // printf("[THREAD %d] key %d page latch unlock\n", trx_id, key);
-        // trx_table[trx_id].old_vals[{table_id, key}].push_back({pn, log_value});
-        // pthread_mutex_unlock(&trx_table_latch);
-        return 0; 
+        return SUCCESS; 
     }
     else {
-        pthread_mutex_unlock(&(ctrl->mutex));
         *old_val_size = 0;
-        return 1; // key not found
+        return FAILURE; // key not found
     }
 }
 
@@ -213,7 +210,7 @@ int db_delete (table_t table_id, key__t key) {
 // • If success, return 0. Otherwise, return non-zero value.
 int init_db(int num_buf) {
     // //// // print("%s\n", __func__);
-    return buf_init(num_buf) || trx_init_table() || init_lock_table();
+    return buf_init(num_buf) || trx_init_table() || lock_init_table();
 }
 
 // 6. int shutdown_db();

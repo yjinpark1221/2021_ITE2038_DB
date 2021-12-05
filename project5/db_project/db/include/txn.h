@@ -49,16 +49,16 @@ struct log_t {
 
 struct trx_entry_t {
     int trx_id;
-    pthread_mutex_t mutex;
+    // pthread_mutex_t mutex;
     lock_t* head;
     lock_t* tail;
     std::vector<log_t> logs;
     std::set<int> wait_edges;
     trx_entry_t(int trx_id) : trx_id(trx_id), head(NULL), tail(NULL) {
-        pthread_mutex_init(&mutex, NULL);
+        // pthread_mutex_init(&mutex, NULL);
     }
     trx_entry_t() : trx_id(0), head(NULL), tail(NULL) {
-        pthread_mutex_init(&mutex, NULL);
+        // pthread_mutex_init(&mutex, NULL);
     }
 };
 
@@ -69,7 +69,7 @@ extern pthread_mutex_t lock_table_latch;
 
 
 
-int init_lock_table();
+int lock_init_table();
 lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode, int* ret_slock, int* ret_xlock);
 lock_t* trx_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode, lock_t* lock, int has_slock, int has_xlock);
 int lock_release(lock_t* lock_obj, int mode = 0);

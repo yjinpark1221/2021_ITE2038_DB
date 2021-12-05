@@ -114,16 +114,12 @@ int trx_release_locks(int trx_id) {
 }
 
 
-// • Initialize any data structures required for implementing lock table, such as hash table, lock table latch, etc.
-// • If success, return 0. Otherwise, return non-zero value.
-int init_lock_table() {
-    // printf("%s\n", __func__);
+int lock_init_table() {
     return pthread_mutex_init(&lock_table_latch, NULL);
 }
 
 lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id, int lock_mode, int* ret_slock, int* ret_xlock) {
     pthread_mutex_lock(&lock_table_latch);
-    // printf("%s\n", __func__);
     auto tmp = lock_table.find({table_id, page_id});
     // not in lock table -> insert empty list into table
     if (tmp == lock_table.end()) {
@@ -384,8 +380,11 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
             printf("cycle 1\n");
             return 1;
         }
+        
         // trx end -> edge remove!
         // when b is aborted or committed
+        // a does not wait for b 
+
         if (trx_table.find(b) == trx_table.end()) {
             trx_table[a].wait_edges.erase(b);
             continue;
@@ -402,15 +401,13 @@ bool dfs(table_t table_id, pagenum_t pn, key__t key, int trx_id, int lock_mode) 
 
 void add_edge(lock_t* lock) {
     trx_entry_t* tentry = &(trx_table[lock->trx_id]);
-
+    pthread_mutex_lock(&lock_table_latch);
     if (lock->lock_mode == SHARED) {
         lock_t* l = lock;
-        for (; l; ) {
-            for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
-            if (l) {
-                tentry->wait_edges.insert(l->trx_id);
-                printf("%d waits for %d\n", lock->trx_id, l->trx_id);
-            }
+        for (; l && (l->record_id != lock->record_id || l->lock_mode == SHARED); l = l->prev);
+        if (l) {
+            tentry->wait_edges.insert(l->trx_id);
+            printf("%d waits for %d\n", lock->trx_id, l->trx_id);
         }
     }
     else {
@@ -420,9 +417,10 @@ void add_edge(lock_t* lock) {
             if (l->trx_id == lock->trx_id) continue;
             tentry->wait_edges.insert(l->trx_id);
             printf("%d waits for %d\n", lock->trx_id, l->trx_id);
-            // if (l->lock_mode == EXCLUSIVE) break;
+            if (l->lock_mode == EXCLUSIVE) break;
         }
     }
+    pthread_mutex_unlock(&lock_table_latch);
 }
 
 void lock_push_back(lock_t* lock) {
