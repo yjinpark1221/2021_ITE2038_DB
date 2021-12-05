@@ -151,7 +151,7 @@ lock_t* lock_acquire(table_t table_id, pagenum_t page_id, key__t key, int trx_id
     }
     // case : x lock
     else {
-        for (lock_t* l = entry->head; l; l = l->next) {
+        for (lock_t* l = entry->tail; l; l = l->prev) {
             if (l->record_id == key && l->trx_id != trx_id) {
                 if (l->lock_mode == SHARED) *ret_slock = 1;
                 else *ret_xlock = 1;
