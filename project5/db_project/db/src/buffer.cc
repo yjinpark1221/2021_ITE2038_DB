@@ -1,6 +1,4 @@
-#ifndef MAINTEST
 #include "buffer.h"
-#endif
 
 #include <cassert>
 
@@ -148,31 +146,31 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum, int trx_id ) {
 
 // 가정 : 이미 buf_read_page를 통해 page latch를 잡았다고 생각
 void buf_write_page(const page_t* src, ctrl_t* ctrl) {
-    // table_t table_id = ctrl->tp.first;
-    // pagenum_t pagenum = ctrl->tp.second;
+    table_t table_id = ctrl->tp.first;
+    pagenum_t pagenum = ctrl->tp.second;
     
-    // if (pagenum == 0) {
-    //     for (int i = 0; i < openedFds.size(); ++i) {
-    //         ctrl_t* hc = hcontrol + i;
-    //         if (hc->tp.first == table_id) {
-    //             memcpy(hc->frame, src, PAGE_SIZE);
-    //             hc->is_dirty = 1;
-    //             return;
-    //         }
-    //     }
-    // }
+    if (pagenum == 0) {
+        for (int i = 0; i < openedFds.size(); ++i) {
+            ctrl_t* hc = hcontrol + i;
+            if (hc->tp.first == table_id) {
+                memcpy(hc->frame, src, PAGE_SIZE);
+                hc->is_dirty = 1;
+                return;
+            }
+        }
+    }
     
-    // auto iter = tp2control.find({table_id, pagenum});
-    ctrl_t* ct = ctrl;
+    auto iter = tp2control.find({table_id, pagenum});
+    ctrl_t* ct;
 
     // not in cache
-    // if (iter == tp2control.end()) {
-    //     perror("in buf_write_page not in cache");
-    //     exit(0);
-    // }
+    if (iter == tp2control.end()) {
+        perror("in buf_write_page not in cache");
+        exit(0);
+    }
 
     // in cache
-    // ct = iter->second;
+    ct = iter->second;
     memcpy(ct->frame, src, PAGE_SIZE);
     ct->is_dirty = 1;
     return;

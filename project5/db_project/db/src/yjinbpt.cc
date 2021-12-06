@@ -1,12 +1,10 @@
-#ifndef MAINTEST
 #include "yjinbpt.h"
-#endif
-#define FAILURE 1
-#define SUCCESS 0
-#define ABORT 1
+
 #include <cassert>
 #include <iostream>
 #define VERBOSE 0
+
+
 // FUNCTION DEFINITIONS.
 
 // 1. int64_t open_table (char *pathname);
@@ -85,7 +83,7 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     if (pn == 0) { // fail
         ret_val[0] = 0;
         *val_size = 0;
-        return FAILURE;
+        return 1;
     }
 
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
@@ -97,16 +95,11 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
         if (trx_id) {
             int has_slock = 0, has_xlock = 0;
             printf("[THREAD %d] acquiring %d lock_mode %d\n", trx_id, key, 0);
-            lock_t* lock = lock_acquire(table_id, pn, key, trx_id, SHARED, &has_slock, &has_xlock);
-            /* case : trx does not have the lock -> new lock returned
-            */
-            if (lock) {
-                if (trx_acquire(table_id, pn, key, trx_id, SHARED, lock, has_slock, has_xlock) == NULL) { // deadlock or waiting
-                    trx_abort(trx_id);
-                    memset(ret_val, 0, 112);
-                    *val_size = 0;
-                    return ABORT;
-                }   
+            if (trx_acquire(trx_id, table_id, pn, key, SHARED)) {
+                printf("[THREAD %d] aborted\n", trx_id);
+                memset(ret_val, 0, 112);
+                *val_size = 0;
+                return -1;
             }
         }
         printf("[THREAD %d] acquired %d lock_mode %d\n", trx_id, key, 0);
@@ -115,12 +108,12 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
             ret_val[j] = leaf.values[i][j];
         }
         *val_size = leaf.slots[i].size;
-        return SUCCESS;
+        return 0;
     }
     else { // fail
         ret_val[0] = 0;
         *val_size = 0;
-        return FAILURE;
+        return 1;
     }
 }
 
@@ -136,7 +129,7 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     pagenum_t pn = find_leaf_page(table_id, key);
     if (pn == 0) { // fail
         *old_val_size = 0;
-        return FAILURE;
+        return 1;
     }
     // printf("leaf page number %d\n", pn);
     page_t page;
@@ -148,17 +141,13 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     if (iter != leaf.slots.end() && iter->key == key) { // key found
         int has_slock = 0, has_xlock = 0;
         printf("[THREAD %d] acquiring %d lock_mode 1\n", trx_id, key);
-        lock_t* lock = lock_acquire(table_id, pn, key, trx_id, EXCLUSIVE, &has_slock, &has_xlock);
-        /* case : trx does not have the lock -> new lock returned
-        */
-        if (lock) {
-            if (trx_acquire(table_id, pn, key, trx_id, EXCLUSIVE, lock, has_slock, has_xlock) == NULL) { // deadlock or waiting
-                trx_abort(trx_id);
-                *old_val_size = 0;
-                return ABORT;
-            }
+        if (trx_acquire(trx_id, table_id, pn, key, EXCLUSIVE)) {
+            printf("[THREAD %d] aborted\n", trx_id);
+            *old_val_size = 0;
+            return -1;
         }
-        printf("[THREAD %d] acquiring %d lock_mode 1\n", trx_id, key);
+        printf("[THREAD %d] acquired %d lock_mode 1\n", trx_id, key);
+
         /* case : trx already has the lock
         */
         ctrl = buf_read_page(table_id, pn, trx_id);
@@ -167,32 +156,37 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
         iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
         
         int idx = iter - leaf.slots.begin();
+        mslot_t log_slot = leaf.slots[idx];
         std::string log_value = leaf.values[idx];
         auto& old_value = leaf.values[idx];
         for (int i = 0; i < iter->size; ++i) {
             old_value[i] = values[i];
         }
         *old_val_size = iter->size;
+        // assert(*old_val_size == new_val_size);
 
         page = leaf;
         buf_write_page(&page, ctrl);
         pthread_mutex_unlock(&(ctrl->mutex));
 
-        pthread_mutex_lock(&trx_table_latch);
-        trx_table[trx_id].logs.emplace_back(table_id, pn, *iter, log_value);
-        pthread_mutex_unlock(&trx_table_latch);
-        return SUCCESS; 
+        pthread_mutex_lock(&trx_latch);
+        printf("bpt log, trx_id %d\n", trx_id);
+        assert(trx_table[trx_id]);
+        trx_table[trx_id]->logs.emplace_back(table_id, pn, log_slot, log_value);
+        pthread_mutex_unlock(&trx_latch);
+        return 0; 
     }
     else {
+        pthread_mutex_unlock(&(ctrl->mutex));
         *old_val_size = 0;
-        return FAILURE; // key not found
+        return 1; // key not found
     }
 }
 
 // 4. int db_delete (int64_t table_id, int64_t key);
 // • Find the matching record and delete it if found.
 // • If success, return 0. Otherwise, return non-zero value.
-int db_delete (table_t table_id, key__t key) {
+int db_delete(table_t table_id, key__t key) {
     // // print("%s\n", __func__);
     char tmpv[123];
     u16_t tmps;
@@ -209,8 +203,11 @@ int db_delete (table_t table_id, key__t key) {
 // • The total number of tables is less than 20.
 // • If success, return 0. Otherwise, return non-zero value.
 int init_db(int num_buf) {
+    transaction_id = 1;
+    trx_table.clear();
+    lock_table.clear();
     // //// // print("%s\n", __func__);
-    return buf_init(num_buf) || trx_init_table() || lock_init_table();
+    return buf_init(num_buf) || pthread_mutex_init(&trx_latch, NULL) || pthread_mutex_init(&trx_latch, NULL);
 }
 
 // 6. int shutdown_db();
@@ -220,8 +217,10 @@ int init_db(int num_buf) {
 int shutdown_db() {
     // printf("%s\n", __func__);
     buf_close_table_file();
-    pthread_mutex_destroy(&trx_table_latch);
-    pthread_mutex_destroy(&lock_table_latch);
+    trx_table.clear();
+    lock_table.clear();
+    pthread_mutex_destroy(&trx_latch);
+    pthread_mutex_destroy(&lock_latch);
     return 0;
 }
 

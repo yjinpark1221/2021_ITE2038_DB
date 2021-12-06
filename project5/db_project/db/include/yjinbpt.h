@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <queue>
 #include "buffer.h"
-#include "txn.h"
+#include "trx.h"
 #define LEAF_THRESHOLD 2500
 #define INTERNAL_MAX_KEYS 248
 #define INTERNAL_MIN_KEYS 124

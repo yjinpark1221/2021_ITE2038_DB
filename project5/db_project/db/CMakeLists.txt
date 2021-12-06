@@ -5,7 +5,7 @@ set(DB_SOURCES
   ${DB_SOURCE_DIR}/file.cc
   ${DB_SOURCE_DIR}/yjinbpt.cc
   ${DB_SOURCE_DIR}/buffer.cc
-  ${DB_SOURCE_DIR}/txn.cc
+  ${DB_SOURCE_DIR}/trx.cc
   # Add your sources here
   # ${DB_SOURCE_DIR}/foo/bar/your_source.cc
   )
@@ -17,7 +17,7 @@ set(DB_HEADERS
   ${DB_HEADER_DIR}/file.h
   ${DB_HEADER_DIR}/yjinbpt.h
   ${DB_HEADER_DIR}/buffer.h
-  ${DB_HEADER_DIR}/txn.h
+  ${DB_HEADER_DIR}/trx.h
   # Add your headers here
   # ${DB_HEADER_DIR}/foo/bar/your_header.h
   )

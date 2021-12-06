@@ -2,7 +2,7 @@
 #define __BUF_H__
 
 #include "file.h"
-#include "txn.h"
+#include "trx.h"
 #include <pthread.h>
 
 typedef std::pair<table_t, pagenum_t> table_page_t; 
@@ -41,4 +41,4 @@ void flush_header(table_t table_id);
 void read_header(table_t table_id);
 void move_to_tail(ctrl_t* ct);
 
-#endif  // __DB_FILE_H__
+#endif  // __BUF_H__

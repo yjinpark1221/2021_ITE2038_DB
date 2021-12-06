@@ -1,6 +1,4 @@
-#ifndef MAINTEST
 #include "page.h"
-#endif
 
 #define VERBOSE 1
 page_t::page_t(mleaf_t& leaf) {

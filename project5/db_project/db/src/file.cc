@@ -1,6 +1,4 @@
-#ifndef MAINTEST
 #include "file.h"
-#endif
 
 std::map<int, table_t> fd2table;
 std::map<table_t, int> table2fd;
