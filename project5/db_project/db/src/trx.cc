@@ -12,9 +12,10 @@ int trx_begin() {
     printf("trx_begin trx_id %d\n", transaction_id);
     assert(trx);
     trx_table[transaction_id] = trx;
+    int ret = transaction_id;
     ++transaction_id;
     pthread_mutex_unlock(&trx_latch);
-    return transaction_id - 1;
+    return ret;
 }
 
 int trx_commit(int trx_id) {
@@ -40,6 +41,7 @@ int trx_abort(int trx_id) {
 
 void trx_release_locks(int trx_id) {
     pthread_mutex_lock(&lock_latch);
+    assert(trx_table[trx_id]);
     lock_t* lock = trx_table[trx_id]->head;
     lock_t* next;
     for (; lock; lock = next) {
