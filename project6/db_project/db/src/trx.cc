@@ -272,8 +272,8 @@ int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int
     
     // wait for other trx to release lock
     if (lock_mode == SHARED && has_xlock) {
+        pthread_cond_wait(&lock->condition, &trx_latch);
         pthread_mutex_unlock(&trx_latch);
-        pthread_cond_wait(&lock->condition, &ctrl->mutex);
         return 0;
     }
     else if (lock_mode == EXCLUSIVE && (has_slock || has_xlock)) {

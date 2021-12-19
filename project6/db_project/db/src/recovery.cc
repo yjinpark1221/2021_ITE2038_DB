@@ -76,12 +76,12 @@ mlog_t get_log(lsn_t lsn) {
 
 // no latch
 void force() {
-    pthread_mutex_lock(&buf_latch);
-    for (auto dirty : dirty_pages) {
-        flush(tp2control[dirty.first]);
-    }
-    dirty_pages.clear();
-    pthread_mutex_unlock(&buf_latch);
+    // pthread_mutex_lock(&buf_latch);
+    // for (auto dirty : dirty_pages) {
+    //     flush(tp2control[dirty.first]);
+    // }
+    // dirty_pages.clear();
+    // pthread_mutex_unlock(&buf_latch);
     
     pthread_mutex_lock(&log_latch);
     flush_logs();

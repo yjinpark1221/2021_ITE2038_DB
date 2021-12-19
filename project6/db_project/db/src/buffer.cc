@@ -139,6 +139,7 @@ void buf_write_page(const page_t* src, ctrl_t* ctrl) {
     ctrl_t* ct = ctrl;
     memcpy(ct->frame, src, PAGE_SIZE);
     ct->is_dirty = 1;
+
     // TODO : need to insert into dirty table !!! 
     // dirty_pages.erase(dirty_pages.find(ctrl->tp));
     return;
@@ -188,7 +189,7 @@ void flush(ctrl_t* ctrl) {
     if (ctrl->is_dirty) {
         file_write_page(ctrl->tp.first, ctrl->tp.second, ctrl->frame);
         ctrl->is_dirty = 0;
-        dirty_pages.erase(dirty_pages.find(ctrl->tp));
+        // dirty_pages.erase(dirty_pages.find(ctrl->tp));
     }
 }
 

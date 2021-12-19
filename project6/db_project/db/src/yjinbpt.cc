@@ -78,12 +78,13 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
 
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
     leaf = *(ctrl->frame);
+    pthread_mutex_unlock(&(ctrl->mutex));
 
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
         if (trx_id) {
             int has_slock = 0, has_xlock = 0;
-            if (trx_acquire(trx_id, table_id, pn, key, SHARED, ctrl)) {
+            if (trx_acquire(trx_id, table_id, pn, key, SHARED)) {
                 pthread_mutex_unlock(&(ctrl->mutex));
                 return -1;
             }
@@ -93,7 +94,6 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
             ret_val[j] = leaf.values[i][j];
         }
         *val_size = leaf.slots[i].size;
-        pthread_mutex_unlock(&(ctrl->mutex));
         return 0;
     }
     else { // fail
