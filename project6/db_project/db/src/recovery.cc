@@ -2,6 +2,7 @@
 
 int logfd;
 std::map<lsn_t, mlog_t> logs;
+pthread_mutex_t log_latch;
 std::map<table_page_t, lsn_t> dirty_pages;
 lsn_t cur_lsn;
 
@@ -21,7 +22,8 @@ log_t::log_t(mlog_t log) {
 }
 
 log_t::log_t() : log_t(mlog_t()) {}
-    
+
+// no latch
 logsize_t get_log_size(type_t type, u16_t size) {
     if (type == BEGIN || type == COMMIT || type == ROLLBACK) {
         return 28;
@@ -37,25 +39,29 @@ logsize_t get_log_size(type_t type, u16_t size) {
     }
 }
 
+// needs latch
 void flush_logs() {
-    for (auto log: logs) {
+    for (auto& log: logs) {
         if (log.second.dirty) {
             log_t l(log.second);
             pwrite(logfd, &log, log.second.log_size, log.second.lsn);
+            log.second.dirty = 0;
         }
     }
-    logs.clear();
 }
 
+// needs latch
 void add_log(mlog_t& log) {
     if (logs.size() == 10000) {
         flush_logs();
+        logs.clear();
     }
     trx_table[log.trx_id]->lastlsn = log.lsn;
     logs[log.lsn] = log;
     cur_lsn += log.size;
 }
 
+// needs latch
 mlog_t get_log(lsn_t lsn) {
     auto iter = logs.find(lsn);
     if (iter != logs.end()) {
@@ -68,14 +74,24 @@ mlog_t get_log(lsn_t lsn) {
     return mlog;
 }
 
+// no latch
 void force() {
+    pthread_mutex_lock(&buf_latch);
     for (auto dirty : dirty_pages) {
         flush(tp2control[dirty.first]);
     }
+    dirty_pages.clear();
+    pthread_mutex_unlock(&buf_latch);
+    
+    pthread_mutex_lock(&log_latch);
     flush_logs();
+    pthread_mutex_unlock(&log_latch);
 }
 
+// no latch
 std::set<int> analyze(FILE* logmsgfp) {
+    pthread_mutex_init(&log_latch, NULL);
+    pthread_mutex_lock(&log_latch);
     fprintf(logmsgfp, "[ANALYSIS] Analysis pass start\n");
 
     std::set<int> winners, losers;
@@ -102,6 +118,7 @@ std::set<int> analyze(FILE* logmsgfp) {
         fprintf(logmsgfp, " %d", lose);
     }
     fprintf(logmsgfp, "\n");
+    pthread_mutex_unlock(&log_latch);
     return losers;
 }
 
@@ -160,7 +177,9 @@ void apply_redo(mlog_t log, FILE* logmsgfp) {
     }
 }
 
+// no latch
 void redo(int flag, int log_num, FILE* logmsgfp) {
+    pthread_mutex_lock(&log_latch);
     fprintf(logmsgfp, "[REDO] Redo pass start\n");
 
     int offset = 0, cnt = 0;
@@ -172,8 +191,10 @@ void redo(int flag, int log_num, FILE* logmsgfp) {
     }
 
     fprintf(logmsgfp, "[REDO] Redo pass end\n");
+    pthread_mutex_unlock(&log_latch);
 }
 
+// needs latch
 void apply_undo(mlog_t log, FILE* logmsgfp, std::priority_queue<lsn_t>& pq) {
     if (log.type == BEGIN) {
         if (logmsgfp) fprintf(logmsgfp, "LSN %lu [ROLLBACK] Transaction id %d\n", log.lsn, log.trx_id);
@@ -210,7 +231,9 @@ void apply_undo(mlog_t log, FILE* logmsgfp, std::priority_queue<lsn_t>& pq) {
     }
 }
 
+// no latch
 void undo(int flag, int log_num, FILE* logmsgfp, std::set<int> losers) {
+    pthread_mutex_lock(&log_latch);
     fprintf(logmsgfp, "[UNDO] Undo pass start\n");
     int cnt = 0;
     std::priority_queue<lsn_t> pq;
@@ -228,4 +251,5 @@ void undo(int flag, int log_num, FILE* logmsgfp, std::set<int> losers) {
         assert(trx.second->status != RUNNING);
     }
     fprintf(logmsgfp, "[UNDO] Undo pass end\n");
+    pthread_mutex_unlock(&log_latch);
 }

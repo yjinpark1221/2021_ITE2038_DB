@@ -78,13 +78,13 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
 
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
     leaf = *(ctrl->frame);
-    pthread_mutex_unlock(&(ctrl->mutex));
 
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // success
         if (trx_id) {
             int has_slock = 0, has_xlock = 0;
-            if (trx_acquire(trx_id, table_id, pn, key, SHARED)) {
+            if (trx_acquire(trx_id, table_id, pn, key, SHARED, ctrl)) {
+                pthread_mutex_unlock(&(ctrl->mutex));
                 return -1;
             }
         }
@@ -93,9 +93,11 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
             ret_val[j] = leaf.values[i][j];
         }
         *val_size = leaf.slots[i].size;
+        pthread_mutex_unlock(&(ctrl->mutex));
         return 0;
     }
     else { // fail
+        pthread_mutex_unlock(&(ctrl->mutex));
         return 1;
     }
 }
@@ -116,17 +118,16 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     page_t page;
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
     mleaf_t leaf = *(ctrl->frame);
-    pthread_mutex_unlock(&ctrl->mutex);
+    // pthread_mutex_unlock(&ctrl->mutex);
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
         int has_slock = 0, has_xlock = 0;
-        if (trx_acquire(trx_id, table_id, pn, key, EXCLUSIVE)) {
+        if (trx_acquire(trx_id, table_id, pn, key, EXCLUSIVE, ctrl)) {
             return -1;
         }
 
         /* case : trx already has the lock
         */
-        ctrl = buf_read_page(table_id, pn, trx_id);
         leaf = *(ctrl->frame);
         iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
         int idx = iter - leaf.slots.begin();
@@ -137,9 +138,11 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
             old_value[i] = values[i];
         }
         *old_val_size = iter->size;
+        pthread_mutex_lock(&log_latch);
         int newlsn = cur_lsn;
         mlog_t log(get_log_size(UPDATE, iter->size), newlsn, trx_table[trx_id]->lastlsn, trx_id, UPDATE, table_id, pn, iter->offset, iter->size, log_value, old_value);
         add_log(log);
+        pthread_mutex_unlock(&log_latch);
 
         leaf.pagelsn = newlsn;
         page = leaf;

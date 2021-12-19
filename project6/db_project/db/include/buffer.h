@@ -11,7 +11,7 @@
 typedef std::pair<table_t, pagenum_t> table_page_t; 
 struct ctrl_t;
 extern std::map<table_page_t, ctrl_t*> tp2control;
-
+extern pthread_mutex_t buf_latch;
 struct ctrl_t {
     table_page_t tp;
     bool is_dirty;

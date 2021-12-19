@@ -53,8 +53,13 @@ table_t buf_open_table_file(const char* pathname) {
 }
 
 void buf_close_table_file() {
-    pthread_mutex_lock(&buf_latch);
+    // flush logs
+    pthread_mutex_lock(&log_latch);
+    flush_logs();
+    pthread_mutex_unlock(&log_latch);
+
     // flush headers 
+    pthread_mutex_lock(&buf_latch);
     for (int i = 0; i < openedFds.size(); ++i) {
         flush(hcontrol + i);
     }
@@ -66,6 +71,7 @@ void buf_close_table_file() {
     delete[] control;
     pthread_mutex_unlock(&buf_latch);
     pthread_mutex_destroy(&buf_latch);
+    pthread_mutex_destroy(&log_latch);
     free(cache);
     free(hcache);
     
@@ -76,7 +82,6 @@ void buf_close_table_file() {
 ctrl_t* buf_alloc_page(table_t table_id) {
     pthread_mutex_lock(&buf_latch);
     flush_header(table_id);
-    flush_logs();
     pagenum_t pn = file_alloc_page(table_id);
     read_header(table_id);
     pthread_mutex_unlock(&buf_latch);
@@ -88,7 +93,6 @@ ctrl_t* buf_alloc_page(table_t table_id) {
 void buf_free_page(table_t table_id, pagenum_t pagenum) {
     pthread_mutex_lock(&buf_latch);
     flush_header(table_id);
-    flush_logs();
     file_free_page(table_id, pagenum);
     read_header(table_id);
     pthread_mutex_unlock(&buf_latch);
@@ -135,6 +139,8 @@ void buf_write_page(const page_t* src, ctrl_t* ctrl) {
     ctrl_t* ct = ctrl;
     memcpy(ct->frame, src, PAGE_SIZE);
     ct->is_dirty = 1;
+    // TODO : need to insert into dirty table !!! 
+    // dirty_pages.erase(dirty_pages.find(ctrl->tp));
     return;
 }
 
@@ -166,6 +172,7 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
         exit(0);
     }
     tp2control.erase(iter);
+    flush_logs();
     flush(ct);
     ct->tp = {table_id, pagenum};
     tp2control[{table_id, pagenum}] = ct;
@@ -179,9 +186,9 @@ ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum) {
 // called flushing the head.next
 void flush(ctrl_t* ctrl) {
     if (ctrl->is_dirty) {
-        flush_logs();
         file_write_page(ctrl->tp.first, ctrl->tp.second, ctrl->frame);
         ctrl->is_dirty = 0;
+        dirty_pages.erase(dirty_pages.find(ctrl->tp));
     }
 }
 
@@ -191,7 +198,6 @@ void flush_header(table_t table_id) {
         ctrl_t* hc = hcontrol + i;
         if (hc->tp.first == 0) return;
         if (hc->tp.first == table_id) {
-            flush_logs();
             file_write_page(table_id, 0, hc->frame);
             return;
         }

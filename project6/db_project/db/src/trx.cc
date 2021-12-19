@@ -10,7 +10,6 @@ int transaction_id;
 int trx_begin() {
     pthread_mutex_lock(&trx_latch);
     trx_entry_t* trx = new trx_entry_t(transaction_id);
-    printf("trx_begin trx_id %d\n", transaction_id);
     assert(trx);
     trx_table[transaction_id] = trx;
     trx->lastlsn = cur_lsn;
@@ -18,8 +17,10 @@ int trx_begin() {
     int ret = transaction_id;
     ++transaction_id;
 
+    pthread_mutex_lock(&log_latch);
     mlog_t log(get_log_size(BEGIN), cur_lsn, cur_lsn, ret, BEGIN);
     add_log(log);
+    pthread_mutex_unlock(&log_latch);
 
     pthread_mutex_unlock(&trx_latch);
     return ret;
@@ -34,10 +35,12 @@ int trx_commit(int trx_id) {
     trx->lastlsn = cur_lsn;
     // delete trx;
 
+    pthread_mutex_lock(&log_latch);
     mlog_t log(get_log_size(COMMIT), cur_lsn, trx_table[trx_id]->lastlsn, trx_id, COMMIT);
     add_log(log);
-
     flush_logs();
+    pthread_mutex_unlock(&log_latch);
+
     pthread_mutex_unlock(&trx_latch);
     return trx_id;
 }
@@ -47,9 +50,11 @@ int trx_abort(int trx_id) {
 
     trx_undo(trx_id);
     trx_release_locks(trx_id);
-    trx_entry_t* trx = trx_table[trx_id];
     
+    pthread_mutex_lock(&log_latch);
     flush_logs();
+    pthread_mutex_unlock(&log_latch);
+
     pthread_mutex_unlock(&trx_latch);
     return trx_id;
 }
@@ -118,6 +123,7 @@ void lock_release(lock_t* lock) {
 
 // roll back
 int trx_undo(int trx_id) {
+    pthread_mutex_lock(&log_latch);
     auto log = get_log(trx_table[trx_id]->lastlsn);
     std::priority_queue<lsn_t> pq;
     pq.push(log.lsn);
@@ -127,6 +133,7 @@ int trx_undo(int trx_id) {
         auto log = get_log(lsn);
         apply_undo(log, NULL, pq);
     }
+    pthread_mutex_unlock(&log_latch);
     return 0;
 }
 
@@ -210,7 +217,7 @@ lock_t* lock_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key
 }
 
 // lock acquiring API
-int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int lock_mode) {
+int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int lock_mode, ctrl_t* ctrl) {
     int has_slock = 0, has_xlock = 0;
     lock_t* lock = lock_acquire(trx_id, table_id, pagenum, key, lock_mode, &has_slock, &has_xlock);
     // case : the transaction already has the lock
@@ -264,18 +271,18 @@ int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int
     }
     
     // wait for other trx to release lock
-    if (lock_mode == SHARED) {
-        if (has_xlock) {
-            pthread_cond_wait(&lock->condition, &trx_latch);
-        }
+    if (lock_mode == SHARED && has_xlock) {
+        pthread_mutex_unlock(&trx_latch);
+        pthread_cond_wait(&lock->condition, &ctrl->mutex);
+        return 0;
     }
-    else {
-        if (has_slock || has_xlock) {
-            pthread_cond_wait(&lock->condition, &trx_latch);
-        }
+    else if (lock_mode == EXCLUSIVE && (has_slock || has_xlock)) {
+        pthread_mutex_unlock(&trx_latch);
+        pthread_cond_wait(&lock->condition, &ctrl->mutex);
+        return 0;
     }
 
-    // done waiting -> acquire
+    // not waiting -> acquire immediately
     pthread_mutex_unlock(&trx_latch);
     return 0;
 }

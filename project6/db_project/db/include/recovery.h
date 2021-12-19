@@ -4,6 +4,7 @@
 #include "buffer.h"
 #include "trx.h"
 #include <set>
+#include <queue>
 
 #define BEGIN 0
 #define UPDATE 1
@@ -81,6 +82,7 @@ struct mlog_t {
 extern lsn_t cur_lsn;
 extern int logfd;
 extern std::map<table_page_t, lsn_t> dirty_pages;
+extern pthread_mutex_t log_latch;
 
 logsize_t get_log_size(type_t type, u16_t size = 0);
 void flush_logs();

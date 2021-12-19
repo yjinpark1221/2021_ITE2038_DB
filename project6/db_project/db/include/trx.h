@@ -6,7 +6,7 @@
 #define RUNNING 0
 #define COMMITTED 1
 #define ABORTED 2
-
+#include "buffer.h"
 #include "yjinbpt.h"
 #include <vector>
 #include <map>
@@ -17,6 +17,7 @@
 #include <stack>
 
 struct lock_entry_t;
+struct ctrl_t;
 
 struct lock_t {
     lock_t* prev;
@@ -78,7 +79,7 @@ void trx_release_locks(int trx_id);
 void lock_release(lock_t* lock);
 int trx_undo(int trx_id);
 lock_t* lock_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int lock_mode, int* ret_slock, int* ret_xlock);
-int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int lock_mode);
+int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int lock_mode, ctrl_t* ctrl = NULL);
 int dfs(int trx_id);
 
 
