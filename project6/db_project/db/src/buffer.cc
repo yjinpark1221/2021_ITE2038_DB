@@ -15,7 +15,6 @@ int cur_buf;
 static ctrl_t head, tail;
 
 int buf_init(int nb) {
-    //printf("%s\n", __func__);
     head.next = &tail;
     tail.prev = &head;
     head.prev = NULL;
@@ -38,7 +37,6 @@ int buf_init(int nb) {
 }
 
 table_t buf_open_table_file(const char* pathname) {
-    // printf("%s\n", __func__);
     pthread_mutex_lock(&buf_latch);
     table_t table_id = file_open_table_file(pathname);
     page_t hp;

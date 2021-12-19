@@ -70,16 +70,19 @@ mnode_t::mnode_t() {
     parent = 0;
     is_leaf = 0;
     num_keys = 0;
+    pagelsn = 0;
 }
 mnode_t::mnode_t(pagenum_t p, u32_t i, u32_t n) {
     parent = p;
     is_leaf = i;
     num_keys = n;
+    pagelsn = 0;
 }
 mnode_t::mnode_t(page_t& page) {
     parent = ((pagenum_t*)page.a)[0 / 8];
     is_leaf = ((u32_t*)page.a)[8 / 4];
     num_keys = ((u32_t*)page.a)[12 / 4];
+    pagelsn = ((lsn_t*)page.a)[24 / 8];
 }
 
 mleaf_t::mleaf_t() :mnode_t(0, 1, 0) {

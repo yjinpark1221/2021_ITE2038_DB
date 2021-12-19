@@ -73,8 +73,6 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     mleaf_t leaf;
     pagenum_t pn = find_leaf_page(table_id, key);
     if (pn == 0) { // fail
-        ret_val[0] = 0;
-        *val_size = 0;
         return 1;
     }
 
@@ -86,15 +84,10 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
     if (iter != leaf.slots.end() && iter->key == key) { // success
         if (trx_id) {
             int has_slock = 0, has_xlock = 0;
-            printf("[THREAD %d] acquiring %d lock_mode %d\n", trx_id, key, 0);
             if (trx_acquire(trx_id, table_id, pn, key, SHARED)) {
-                printf("[THREAD %d] aborted\n", trx_id);
-                memset(ret_val, 0, 112);
-                *val_size = 0;
                 return -1;
             }
         }
-        printf("[THREAD %d] acquired %d lock_mode %d\n", trx_id, key, 0);
         i = iter - leaf.slots.begin();
         for (int j = 0; j < leaf.slots[i].size; ++j) {
             ret_val[j] = leaf.values[i][j];
@@ -103,8 +96,6 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
         return 0;
     }
     else { // fail
-        ret_val[0] = 0;
-        *val_size = 0;
         return 1;
     }
 }
@@ -120,33 +111,24 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
     // printf("%d %s\n", trx_id, __func__);
     pagenum_t pn = find_leaf_page(table_id, key);
     if (pn == 0) { // fail
-        *old_val_size = 0;
         return 1;
     }
-    // printf("leaf page number %d\n", pn);
     page_t page;
     ctrl_t* ctrl = buf_read_page(table_id, pn, trx_id);
     mleaf_t leaf = *(ctrl->frame);
-    // printf("printing leaf\nnum_keys %d\t parent %d\t is_leaf \n", leaf.num_keys, leaf.parent, leaf.is_leaf);
     pthread_mutex_unlock(&ctrl->mutex);
     auto iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
     if (iter != leaf.slots.end() && iter->key == key) { // key found
         int has_slock = 0, has_xlock = 0;
-        printf("[THREAD %d] acquiring %d lock_mode 1\n", trx_id, key);
         if (trx_acquire(trx_id, table_id, pn, key, EXCLUSIVE)) {
-            printf("[THREAD %d] aborted\n", trx_id);
-            *old_val_size = 0;
             return -1;
         }
-        printf("[THREAD %d] acquired %d lock_mode 1\n", trx_id, key);
 
         /* case : trx already has the lock
         */
         ctrl = buf_read_page(table_id, pn, trx_id);
-        // printf("[THREAD %d] key %d buf_read_page done\n", trx_id, key);
         leaf = *(ctrl->frame);
         iter = std::lower_bound(leaf.slots.begin(), leaf.slots.end(), key);
-        
         int idx = iter - leaf.slots.begin();
         mslot_t log_slot = leaf.slots[idx];
         std::string log_value = leaf.values[idx];
@@ -155,22 +137,19 @@ int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size
             old_value[i] = values[i];
         }
         *old_val_size = iter->size;
-        // assert(*old_val_size == new_val_size);
+        int newlsn = cur_lsn;
+        mlog_t log(get_log_size(UPDATE, iter->size), newlsn, trx_table[trx_id]->lastlsn, trx_id, UPDATE, table_id, pn, iter->offset, iter->size, log_value, old_value);
+        add_log(log);
 
+        leaf.pagelsn = newlsn;
         page = leaf;
         buf_write_page(&page, ctrl);
         pthread_mutex_unlock(&(ctrl->mutex));
 
-        pthread_mutex_lock(&trx_latch);
-        printf("bpt log, trx_id %d\n", trx_id);
-        assert(trx_table[trx_id]);
-        trx_table[trx_id]->logs.emplace_back(table_id, pn, log_slot, log_value);
-        pthread_mutex_unlock(&trx_latch);
         return 0; 
     }
     else {
         pthread_mutex_unlock(&(ctrl->mutex));
-        *old_val_size = 0;
         return 1; // key not found
     }
 }
@@ -203,13 +182,13 @@ int init_db(int num_buf, int flag, int log_num, char* log_path, char* logmsg_pat
     pthread_mutex_init(&lock_latch, NULL);
     logfd = open(log_path, O_RDWR | O_CREAT, 0644);
     FILE* logmsgfp = fopen(logmsg_path, "a");
-    analyze(logmsgfp);
+    std::set<int> losers = analyze(logmsgfp);
     redo(flag, log_num, logmsgfp);
     if (flag == 1) {
         force();
         return 0;
     }
-    undo(flag, log_num, logmsgfp);
+    undo(flag, log_num, logmsgfp, losers);
     force();
     return 0;
 }

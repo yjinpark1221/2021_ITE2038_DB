@@ -1,4 +1,5 @@
 #include "trx.h"
+#include "recovery.h"
 
 pthread_mutex_t trx_latch;
 pthread_mutex_t lock_latch;
@@ -12,8 +13,14 @@ int trx_begin() {
     printf("trx_begin trx_id %d\n", transaction_id);
     assert(trx);
     trx_table[transaction_id] = trx;
+    trx->lastlsn = cur_lsn;
+    trx->status = RUNNING;
     int ret = transaction_id;
     ++transaction_id;
+
+    mlog_t log(get_log_size(BEGIN), cur_lsn, cur_lsn, ret, BEGIN);
+    add_log(log);
+
     pthread_mutex_unlock(&trx_latch);
     return ret;
 }
@@ -22,18 +29,28 @@ int trx_commit(int trx_id) {
     pthread_mutex_lock(&trx_latch);
     trx_release_locks(trx_id);
     trx_entry_t* trx = trx_table[trx_id];
-    trx_table.erase(trx_table.find(trx_id));
-    delete trx;
+    // trx_table.erase(trx_table.find(trx_id));
+    trx->status = COMMITTED;
+    trx->lastlsn = cur_lsn;
+    // delete trx;
+
+    mlog_t log(get_log_size(COMMIT), cur_lsn, trx_table[trx_id]->lastlsn, trx_id, COMMIT);
+    add_log(log);
+
+    flush_logs();
     pthread_mutex_unlock(&trx_latch);
     return trx_id;
 }
 
 int trx_abort(int trx_id) {
+    pthread_mutex_lock(&trx_latch);
+
     trx_undo(trx_id);
     trx_release_locks(trx_id);
     trx_entry_t* trx = trx_table[trx_id];
-    trx_table.erase(trx_table.find(trx_id));
-    delete trx;
+    
+    flush_logs();
+    pthread_mutex_unlock(&trx_latch);
     return trx_id;
 }
 
@@ -101,19 +118,14 @@ void lock_release(lock_t* lock) {
 
 // roll back
 int trx_undo(int trx_id) {
-    auto& log = trx_table[trx_id]->logs;
-    for (int i = (int)log.size() - 1; i >= 0; --i) {
-        auto& entry = log[i];
-        table_t table_id = entry.table_id;
-        pagenum_t pagenum = entry.pagenum;
-        mslot_t slot = entry.slot;
-        std::string value = entry.value;
-
-        ctrl_t* ctrl = buf_read_page(table_id, pagenum);
-        page_t page = *(ctrl->frame);
-        memcpy(page.a + slot.offset, value.c_str(),  slot.size);
-        buf_write_page(&page, ctrl);
-        pthread_mutex_unlock(&ctrl->mutex);
+    auto& log = get_log(trx_table[trx_id]->lastlsn);
+    std::priority_queue<lsn_t> pq;
+    pq.push(log.lsn);
+    for (; !pq.empty();) {
+        int lsn = pq.top();
+        pq.pop();
+        auto& log = get_log(lsn);
+        apply_undo(log, NULL, pq);
     }
     return 0;
 }
@@ -247,7 +259,6 @@ int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int
     
     // case : deadlock -> transaction abort
     if (dfs(trx_id)) {
-        trx_abort(trx_id);
         pthread_mutex_unlock(&trx_latch);
         return 1;
     }
@@ -269,37 +280,6 @@ int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int
     return 0;
 }
 
-// deadlock detection
-// int dfs(int trx_id) {
-//     std::map<int, bool> visited;
-//     std::stack<std::pair<int, int> > st;
-//     for (int ed : trx_table[trx_id]->edge) {
-//         st.push({trx_id, ed});
-//         assert(ed != trx_id);
-//     }
-//     visited[trx_id] = 1;
-//     for (; !st.empty(); ) {
-//         int a = st.top().first;
-//         int b = st.top().second;
-//         st.pop();
-//         if (b == trx_id) {
-//             return 1;
-//         }
-//         auto it = trx_table.find(b);
-//         if (it == trx_table.end() || it->second == NULL){
-//             trx_table[a]->edge.erase(b);
-//         }
-//         if (visited[b]) {
-//             continue;
-//         }
-//         visited[b] = 1;
-//         for (int ed : trx_table[b]->edge) {
-//             st.push({b, ed});
-//         }
-//     }
-//     return 0;
-// }
-
 int dfs(int trx_id) {
     std::stack<std::pair<int, int> > q;
     std::set<int> visited;
@@ -310,7 +290,6 @@ int dfs(int trx_id) {
     }
 
     for (; !q.empty();) {
-        // printf("%d q.size() %d\n", trx_id, q.size());
         auto fr = q.top();
         q.pop();
         // a is waiting for **b**
@@ -322,7 +301,7 @@ int dfs(int trx_id) {
         }
         // trx end -> edge remove!
         // when b is aborted or committed
-        if (trx_table.find(b) == trx_table.end()) {
+        if (trx_table.find(b) == trx_table.end() || trx_table[b]->status != RUNNING) {
             trx_table[a]->edge.erase(b);
             continue;
         }
@@ -332,6 +311,5 @@ int dfs(int trx_id) {
             q.push({b, edge});
         }
     }
-    printf("cycle 0\n");
     return 0;
 }
