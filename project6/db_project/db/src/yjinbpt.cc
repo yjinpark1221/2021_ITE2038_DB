@@ -24,6 +24,7 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size) {
     mleaf_t leaf;
     // TODO : check find
     if (db_find(table_id, key, tmpv, &tmps) == 0) { // find success -> db unchanged
+        printf("key found, insertion failed\n");
         return 1;                           // insert fail
     }
     std::string svalue = "";
@@ -85,7 +86,6 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
         if (trx_id) {
             int has_slock = 0, has_xlock = 0;
             if (trx_acquire(trx_id, table_id, pn, key, SHARED)) {
-                pthread_mutex_unlock(&(ctrl->mutex));
                 return -1;
             }
         }
@@ -97,7 +97,6 @@ int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, i
         return 0;
     }
     else { // fail
-        pthread_mutex_unlock(&(ctrl->mutex));
         return 1;
     }
 }
@@ -183,8 +182,9 @@ int init_db(int num_buf, int flag, int log_num, char* log_path, char* logmsg_pat
     buf_init(num_buf);
     pthread_mutex_init(&trx_latch, NULL);
     pthread_mutex_init(&lock_latch, NULL);
-    logfd = open(log_path, O_RDWR | O_CREAT, 0644);
+    logfd = open(log_path, O_RDWR | O_CREAT | O_SYNC, 0644);
     FILE* logmsgfp = fopen(logmsg_path, "a");
+    setbuf(logmsgfp, NULL);
     std::set<int> losers = analyze(logmsgfp);
     redo(flag, log_num, logmsgfp);
     if (flag == 1) {
@@ -276,7 +276,7 @@ int cut_leaf(mleaf_t* leaf) {
         sum += leaf->slots[i].size + 12;
         if (sum >= 1984) break;
     }
-    //// // print("cut leaf i = %d, sum = %d, num_keys = %d\n", i, sum, leaf->num_keys);
+    printf("cut leaf i = %d, sum = %d, num_keys = %d\n", i, sum, leaf->num_keys);
     assert(i < leaf->num_keys);
     return i;
 }

@@ -42,17 +42,15 @@ logsize_t get_log_size(type_t type, u16_t size) {
 // needs latch
 void flush_logs() {
     for (auto& log: logs) {
-        if (log.second.dirty) {
-            log_t l(log.second);
-            pwrite(logfd, &log, log.second.log_size, log.second.lsn);
-            log.second.dirty = 0;
-        }
+        log_t l(log.second);
+        pwrite(logfd, &log, log.second.log_size, log.second.lsn);
+        log.second.dirty = 0;
     }
 }
 
 // needs latch
 void add_log(mlog_t& log) {
-    if (logs.size() == 10000) {
+    if (logs.size() == 100000) {
         flush_logs();
         logs.clear();
     }

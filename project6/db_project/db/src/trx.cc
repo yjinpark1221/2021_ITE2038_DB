@@ -12,12 +12,12 @@ int trx_begin() {
     trx_entry_t* trx = new trx_entry_t(transaction_id);
     assert(trx);
     trx_table[transaction_id] = trx;
+    pthread_mutex_lock(&log_latch);
     trx->lastlsn = cur_lsn;
     trx->status = RUNNING;
     int ret = transaction_id;
     ++transaction_id;
 
-    pthread_mutex_lock(&log_latch);
     mlog_t log(get_log_size(BEGIN), cur_lsn, cur_lsn, ret, BEGIN);
     add_log(log);
     pthread_mutex_unlock(&log_latch);
@@ -31,11 +31,11 @@ int trx_commit(int trx_id) {
     trx_release_locks(trx_id);
     trx_entry_t* trx = trx_table[trx_id];
     // trx_table.erase(trx_table.find(trx_id));
+    pthread_mutex_lock(&log_latch);
     trx->status = COMMITTED;
     trx->lastlsn = cur_lsn;
     // delete trx;
 
-    pthread_mutex_lock(&log_latch);
     mlog_t log(get_log_size(COMMIT), cur_lsn, trx_table[trx_id]->lastlsn, trx_id, COMMIT);
     add_log(log);
     flush_logs();
