@@ -217,7 +217,7 @@ lock_t* lock_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key
 }
 
 // lock acquiring API
-int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int lock_mode, ctrl_t* ctrl) {
+int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int lock_mode, ctrl_t** pctrl) {
     int has_slock = 0, has_xlock = 0;
     lock_t* lock = lock_acquire(trx_id, table_id, pagenum, key, lock_mode, &has_slock, &has_xlock);
     // case : the transaction already has the lock
@@ -278,7 +278,9 @@ int trx_acquire(int trx_id, table_t table_id, pagenum_t pagenum, key__t key, int
     }
     else if (lock_mode == EXCLUSIVE && (has_slock || has_xlock)) {
         pthread_mutex_unlock(&trx_latch);
-        pthread_cond_wait(&lock->condition, &ctrl->mutex);
+        pthread_cond_wait(&lock->condition, &(*pctrl)->mutex);
+        pthread_mutex_unlock(&(*pctrl)->mutex);
+        *pctrl = buf_read_page(table_id, pagenum);
         return 0;
     }
 

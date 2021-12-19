@@ -56,6 +56,7 @@ void add_log(mlog_t& log) {
         flush_logs();
         logs.clear();
     }
+    if (trx_table[log.trx_id] == NULL) trx_table[log.trx_id] = new trx_entry_t(log.trx_id); 
     trx_table[log.trx_id]->lastlsn = log.lsn;
     logs[log.lsn] = log;
     cur_lsn += log.size;
@@ -74,14 +75,11 @@ mlog_t get_log(lsn_t lsn) {
     return mlog;
 }
 
-// no latch
+// no latch, do alone
 void force() {
-    // pthread_mutex_lock(&buf_latch);
-    // for (auto dirty : dirty_pages) {
-    //     flush(tp2control[dirty.first]);
-    // }
-    // dirty_pages.clear();
-    // pthread_mutex_unlock(&buf_latch);
+    pthread_mutex_lock(&buf_latch);
+    flush_buf();
+    pthread_mutex_unlock(&buf_latch);
     
     pthread_mutex_lock(&log_latch);
     flush_logs();
@@ -125,7 +123,7 @@ std::set<int> analyze(FILE* logmsgfp) {
 void apply_redo(mlog_t log, FILE* logmsgfp) {
     if (log.type == BEGIN) {
         fprintf(logmsgfp, "LSN %lu [BEGIN] Transaction id %d\n", log.lsn, log.trx_id);
-        trx_table[log.trx_id] = new trx_entry_t(log.trx_id);
+        if (trx_table[log.trx_id] == NULL) trx_table[log.trx_id] = new trx_entry_t(log.trx_id);
         trx_table[log.trx_id]->lastlsn = log.lsn;
         trx_table[log.trx_id]->status = RUNNING;
     }

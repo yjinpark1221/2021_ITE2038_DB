@@ -250,3 +250,9 @@ void move_to_tail(ctrl_t* ct) {
     ct->next = &tail;
     tail.prev = ct;
 }
+
+void flush_buf() {
+    for (int i = 0; i < cur_buf; ++i) {
+        flush(control + i);
+    }
+}

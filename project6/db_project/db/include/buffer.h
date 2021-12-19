@@ -41,6 +41,7 @@ ctrl_t* buf_read_page(table_t table_id, pagenum_t pagenum, int trx_id = 0);
 void buf_write_page(const page_t* src, ctrl_t* ctrl);
 
 void flush(ctrl_t* pc);
+void flush_buf();
 ctrl_t* flush_LRU(table_t table_id, pagenum_t pagenum);
 void flush_header(table_t table_id);
 void read_header(table_t table_id);
