@@ -3,6 +3,8 @@
 
 #include "file.h"
 #include "trx.h"
+#include "recovery.h"
+
 #include <pthread.h>
 #include <map>
 

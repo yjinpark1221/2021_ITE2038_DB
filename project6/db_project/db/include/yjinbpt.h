@@ -10,6 +10,8 @@
 #include <queue>
 #include "buffer.h"
 #include "trx.h"
+#include "recovery.h"
+
 #define LEAF_THRESHOLD 2500
 #define INTERNAL_MAX_KEYS 248
 #define INTERNAL_MIN_KEYS 124
@@ -67,7 +69,7 @@ int db_insert(table_t table_id, key__t key, char * value, u16_t val_size);
 int db_delete (table_t table_id, key__t key);
 int db_find(int64_t table_id, int64_t key, char* ret_val, uint16_t * val_size, int trx_id = 0);
 int db_update(int64_t table_id, int64_t key, char* values, uint16_t new_val_size, uint16_t* old_val_size, int trx_id);
-int init_db(int);
+int init_db(int num_buf, int flag, int log_num, char* log_path, char* logmsg_path);
 int shutdown_db();
 
 void print_leaves(table_t fd, mnode_t* root );

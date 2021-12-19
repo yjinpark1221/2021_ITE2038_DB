@@ -21,6 +21,7 @@ typedef int64_t table_t;
 typedef int64_t key__t;
 typedef uint16_t u16_t;
 typedef uint32_t u32_t;
+typedef uint64_t lsn_t;
 
 struct page_t;
 struct slot_t;
@@ -63,6 +64,7 @@ struct mnode_t {
     pagenum_t parent;
     u32_t is_leaf;
     u32_t num_keys;
+    lsn_t pagelsn;
     mnode_t();
     mnode_t(pagenum_t p, u32_t i, u32_t n);
     mnode_t(page_t& page);

@@ -1,8 +1,12 @@
 #ifndef __TRX_H__
 #define __TRX_H__
 
-#define EXCLUSIVE 1
 #define SHARED 0
+#define EXCLUSIVE 1
+#define RUNNING 0
+#define COMMITTED 1
+#define ABORTED 2
+
 #include "yjinbpt.h"
 #include <vector>
 #include <map>
@@ -43,22 +47,14 @@ struct lock_entry_t {
     lock_entry_t(table_t t, pagenum_t p) : table_id(t), pagenum(p), head(NULL), tail(NULL) {}
 };
 
-struct log_t {
-    table_t table_id;
-    pagenum_t pagenum;
-    mslot_t slot;
-    std::string value;
-    log_t() : table_id(0), pagenum(0) {}
-    log_t(table_t table_id, pagenum_t pagenum, mslot_t slot, std::string value) : table_id(table_id), pagenum(pagenum), slot(slot), value(value) {}
-};
-
 struct trx_entry_t {
     int trx_id;
     lock_t* head;
     lock_t* tail;
     std::set<int> edge;
     std::set<int> rev_edge;
-    std::vector<log_t> logs;
+    int status;
+    lsn_t lastlsn;
     trx_entry_t() : trx_id(0), head(NULL), tail(NULL) {}
     trx_entry_t(int trx_id) : trx_id(trx_id), head(NULL), tail(NULL) {}
 };

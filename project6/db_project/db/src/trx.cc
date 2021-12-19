@@ -118,13 +118,13 @@ void lock_release(lock_t* lock) {
 
 // roll back
 int trx_undo(int trx_id) {
-    auto& log = get_log(trx_table[trx_id]->lastlsn);
+    auto log = get_log(trx_table[trx_id]->lastlsn);
     std::priority_queue<lsn_t> pq;
     pq.push(log.lsn);
     for (; !pq.empty();) {
         int lsn = pq.top();
         pq.pop();
-        auto& log = get_log(lsn);
+        auto log = get_log(lsn);
         apply_undo(log, NULL, pq);
     }
     return 0;

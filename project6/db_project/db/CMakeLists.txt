@@ -19,7 +19,7 @@ set(DB_HEADERS
   ${DB_HEADER_DIR}/yjinbpt.h
   ${DB_HEADER_DIR}/buffer.h
   ${DB_HEADER_DIR}/trx.h
-  ${DB_SOURCE_DIR}/recovery.h
+  ${DB_HEADER_DIR}/recovery.h
   # Add your headers here
   # ${DB_HEADER_DIR}/foo/bar/your_header.h
   )

@@ -1,4 +1,4 @@
-#include "../include/recovery.h"
+#include "recovery.h"
 
 int logfd;
 std::map<lsn_t, mlog_t> logs;
@@ -56,7 +56,7 @@ void add_log(mlog_t& log) {
     cur_lsn += log.size;
 }
 
-mlog_t& get_log(lsn_t lsn) {
+mlog_t get_log(lsn_t lsn) {
     auto iter = logs.find(lsn);
     if (iter != logs.end()) {
         return iter->second;
@@ -64,8 +64,8 @@ mlog_t& get_log(lsn_t lsn) {
     log_t log;
     pread(logfd, &log, sizeof(log_t), lsn);
     mlog_t mlog(log);
-    add_log(mlog);
-    return logs[lsn];
+    if (mlog.type != 5) add_log(mlog);
+    return mlog;
 }
 
 void force() {
@@ -105,7 +105,7 @@ std::set<int> analyze(FILE* logmsgfp) {
     return losers;
 }
 
-void apply_redo(mlog_t& log, FILE* logmsgfp) {
+void apply_redo(mlog_t log, FILE* logmsgfp) {
     if (log.type == BEGIN) {
         fprintf(logmsgfp, "LSN %lu [BEGIN] Transaction id %d\n", log.lsn, log.trx_id);
         trx_table[log.trx_id] = new trx_entry_t(log.trx_id);
@@ -174,7 +174,7 @@ void redo(int flag, int log_num, FILE* logmsgfp) {
     fprintf(logmsgfp, "[REDO] Redo pass end\n");
 }
 
-void apply_undo(mlog_t& log, FILE* logmsgfp, std::priority_queue<lsn_t>& pq) {
+void apply_undo(mlog_t log, FILE* logmsgfp, std::priority_queue<lsn_t>& pq) {
     if (log.type == BEGIN) {
         if (logmsgfp) fprintf(logmsgfp, "LSN %lu [ROLLBACK] Transaction id %d\n", log.lsn, log.trx_id);
         trx_table[log.trx_id]->lastlsn = cur_lsn;
@@ -210,7 +210,7 @@ void apply_undo(mlog_t& log, FILE* logmsgfp, std::priority_queue<lsn_t>& pq) {
     }
 }
 
-void undo(int flag, int log_num, FILE* logmsgfp, lsn_t lastlsn, std::set<int> losers) {
+void undo(int flag, int log_num, FILE* logmsgfp, std::set<int> losers) {
     fprintf(logmsgfp, "[UNDO] Undo pass start\n");
     int cnt = 0;
     std::priority_queue<lsn_t> pq;

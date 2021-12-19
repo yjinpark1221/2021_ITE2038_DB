@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "yjinbpt.h"
 #include "recovery.h"
-#include "trx.cc"
+#include "trx.h"
 #include <string>
 
 TEST(InsertTest, ascEven50_10000) {

@@ -73,8 +73,8 @@ void* trx_write_only(void* arg)
 
 int main(int argc, char const *argv[])
 {
-    init_db(100000);
-    tid = open_table(const_cast<char*>("my3ngd.db"));
+    // init_db(100000);
+    tid = open_table(const_cast<char*>("asdf.db"));
 
     for (int i = 0; i < 10; i++)
     {
